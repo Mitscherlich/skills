@@ -1,20 +1,29 @@
 ---
 name: xmind
 description: 当用户要求"解析 xmind"、"打开思维导图"、"创建 xmind"、"新建思维导图"、"更新 xmind"、"修改思维导图"、"xmind 转 markdown"、"查看 xmind 内容"时，应使用此技能。此技能提供 XMind 思维导图文件的解析、创建和更新能力，支持 XMind 8 和 XMind Zen/2020+ 两种格式，并将内容转换为 Markdown 作为会话记忆，方便持续交流。
-version: 0.1.0
+version: 0.2.0
 ---
 
 # XMind 思维导图处理技能
 
-此技能提供 XMind 文件（`.xmind`）的完整处理能力：解析、创建和更新。通过配套的 Python 工具脚本 `xmind_tool.py` 实现文件操作，将思维导图内容转换为 Markdown 格式作为会话级记忆，便于用户与模型持续交流和编辑。
+此技能提供 XMind 文件（`.xmind`）的完整处理能力：解析、创建和更新。通过配套的 Python 工具脚本实现文件操作，将思维导图内容转换为 Markdown 格式作为会话级记忆，便于用户与模型持续交流和编辑。
 
 ## 工具脚本
 
-本技能依赖同目录下的 `xmind_tool.py`，使用 Python 标准库（零第三方依赖）。执行方式：
+本技能依赖 `scripts/xmind_tool.py`（相对于本技能目录），使用 Python 标准库（零第三方依赖）。执行方式：
 
 ```bash
-python skills/xmind/xmind_tool.py <command> [args...]
+python skills/xmind/scripts/xmind_tool.py --session <session-id> <command> [args...]
 ```
+
+### 会话管理
+
+所有命令都需要 `--session <id>` 参数，用于隔离不同会话的记忆文件。
+
+**会话 ID 管理规则：**
+- 在会话中首次使用本技能时，生成一个短 UUID 作为 session ID（例如 `a1b2c3d4`）
+- 在同一会话的后续调用中复用该 ID
+- 记忆文件存储路径：`/tmp/skills-xmind-parsed/<session-id>/<filename>.md`
 
 ## 支持的格式
 
@@ -72,7 +81,7 @@ python skills/xmind/xmind_tool.py <command> [args...]
 2. **执行解析**：运行工具脚本
 
    ```bash
-   python skills/xmind/xmind_tool.py parse <file.xmind>
+   python skills/xmind/scripts/xmind_tool.py --session <session-id> parse <file.xmind>
    ```
 
 3. **展示结果**：将输出的 Markdown 内容展示给用户，包括：
@@ -94,12 +103,11 @@ python skills/xmind/xmind_tool.py <command> [args...]
    - 各分支下有哪些子节点？
    - 是否需要添加标签、备注、链接等？
 2. **生成 Markdown**：根据用户描述，按照上述 Markdown 规范生成内容
-3. **写入临时 Markdown 文件**：将生成的 Markdown 写入临时文件
+3. **写入临时 Markdown 文件并执行创建**：
 
    ```bash
-   # 将 markdown 内容写入临时文件
-   # 然后执行创建
-   python skills/xmind/xmind_tool.py create <output.xmind> <temp.md> [--format zen|legacy]
+   # 将 markdown 内容写入临时文件，然后执行创建
+   python skills/xmind/scripts/xmind_tool.py --session <session-id> create <output.xmind> <temp.md> [--format zen|legacy]
    ```
 
 4. **确认创建结果**：向用户报告文件创建成功，展示文件路径
@@ -119,13 +127,13 @@ python skills/xmind/xmind_tool.py <command> [args...]
    - 首先尝试读取记忆文件（如果之前已解析过）：
 
      ```bash
-     python skills/xmind/xmind_tool.py memory <file.xmind>
+     python skills/xmind/scripts/xmind_tool.py --session <session-id> memory <file.xmind>
      ```
 
    - 如果没有记忆文件，先执行解析：
 
      ```bash
-     python skills/xmind/xmind_tool.py parse <file.xmind>
+     python skills/xmind/scripts/xmind_tool.py --session <session-id> parse <file.xmind>
      ```
 
 2. **理解修改需求**：与用户确认要进行的修改，例如：
@@ -138,7 +146,7 @@ python skills/xmind/xmind_tool.py <command> [args...]
 5. **执行更新**：
 
    ```bash
-   python skills/xmind/xmind_tool.py update <file.xmind> <modified.md>
+   python skills/xmind/scripts/xmind_tool.py --session <session-id> update <file.xmind> <modified.md>
    ```
 
 6. **确认结果**：向用户报告更新成功，展示变更摘要
@@ -160,7 +168,7 @@ python skills/xmind/xmind_tool.py <command> [args...]
 
 - 解析和创建操作涉及文件 I/O，执行前确认路径有效
 - 更新操作会覆盖原文件，如用户未明确要求，建议先备份或另存为新文件
-- 记忆文件存储在系统临时目录 (`/tmp/xmind_sessions/`)，会话结束后可能被系统清理
+- 记忆文件存储在 `/tmp/skills-xmind-parsed/<session-id>/`，会话结束后可能被系统清理
 - 如遇到损坏的 xmind 文件（非有效 ZIP 或缺少关键内容文件），向用户报告具体错误
 - XMind 文件中的图片附件不会包含在 Markdown 中，仅处理文本结构和元数据
 - 整个流程中使用中文与用户交互

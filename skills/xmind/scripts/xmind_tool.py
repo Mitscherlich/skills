@@ -6,10 +6,13 @@ XMind Tool - 零依赖 XMind 文件解析、创建和更新工具。
 仅使用 Python 标准库，无需安装第三方依赖。
 
 用法:
-  python xmind_tool.py parse   <file.xmind>                              解析为 Markdown
-  python xmind_tool.py create  <output.xmind> <input.md> [--format zen|legacy]  从 Markdown 创建
-  python xmind_tool.py update  <file.xmind> <modified.md>                更新已有文件
-  python xmind_tool.py memory  <file.xmind>                              查看会话记忆文件
+  python xmind_tool.py --session <id> parse   <file.xmind>                              解析为 Markdown
+  python xmind_tool.py --session <id> create  <output.xmind> <input.md> [--format zen|legacy]  从 Markdown 创建
+  python xmind_tool.py --session <id> update  <file.xmind> <modified.md>                更新已有文件
+  python xmind_tool.py --session <id> memory  <file.xmind>                              查看会话记忆文件
+
+--session <id> 为必填参数，用于隔离不同会话的记忆文件。
+记忆文件存储路径: /tmp/skills-xmind-parsed/<session-id>/<filename>.md
 """
 
 import io
@@ -623,24 +626,24 @@ def update_xmind(xmind_path, md_path):
 # 会话记忆文件管理
 # ============================================================
 
-def get_memory_dir():
-    """获取会话记忆目录。"""
-    d = os.path.join(tempfile.gettempdir(), 'xmind_sessions')
+def get_memory_dir(session_id):
+    """获取会话记忆目录: /tmp/skills-xmind-parsed/<session-id>/"""
+    d = os.path.join(tempfile.gettempdir(), 'skills-xmind-parsed', session_id)
     os.makedirs(d, exist_ok=True)
     return d
 
 
-def get_memory_path(xmind_path):
-    """根据 xmind 文件路径生成对应的记忆文件路径。"""
+def get_memory_path(session_id, xmind_path):
+    """根据 session ID 和 xmind 文件路径生成对应的记忆文件路径。"""
     stem = Path(xmind_path).stem
-    return os.path.join(get_memory_dir(), f'{stem}.md')
+    return os.path.join(get_memory_dir(session_id), f'{stem}.md')
 
 
 # ============================================================
 # CLI 入口
 # ============================================================
 
-def cmd_parse(args):
+def cmd_parse(session_id, args):
     if not args:
         print('错误：缺少 xmind 文件路径', file=sys.stderr)
         return 1
@@ -655,7 +658,7 @@ def cmd_parse(args):
     md = sheets_to_markdown(sheets)
 
     # 保存到会话记忆
-    mem = get_memory_path(xmind_path)
+    mem = get_memory_path(session_id, xmind_path)
     with open(mem, 'w', encoding='utf-8') as f:
         f.write(md)
 
@@ -664,9 +667,9 @@ def cmd_parse(args):
     return 0
 
 
-def cmd_create(args):
+def cmd_create(session_id, args):
     if len(args) < 2:
-        print('用法: xmind_tool.py create <output.xmind> <input.md> [--format zen|legacy]', file=sys.stderr)
+        print('用法: xmind_tool.py --session <id> create <output.xmind> <input.md> [--format zen|legacy]', file=sys.stderr)
         return 1
 
     output_path = args[0]
@@ -696,7 +699,7 @@ def cmd_create(args):
         create_zen(sheets, output_path)
 
     # 更新会话记忆
-    mem = get_memory_path(output_path)
+    mem = get_memory_path(session_id, output_path)
     with open(mem, 'w', encoding='utf-8') as f:
         f.write(md_text)
 
@@ -706,9 +709,9 @@ def cmd_create(args):
     return 0
 
 
-def cmd_update(args):
+def cmd_update(session_id, args):
     if len(args) < 2:
-        print('用法: xmind_tool.py update <file.xmind> <modified.md>', file=sys.stderr)
+        print('用法: xmind_tool.py --session <id> update <file.xmind> <modified.md>', file=sys.stderr)
         return 1
 
     xmind_path = args[0]
@@ -724,7 +727,7 @@ def cmd_update(args):
     update_xmind(xmind_path, md_path)
 
     # 更新会话记忆
-    mem = get_memory_path(xmind_path)
+    mem = get_memory_path(session_id, xmind_path)
     with open(md_path, 'r', encoding='utf-8') as f:
         md_text = f.read()
     with open(mem, 'w', encoding='utf-8') as f:
@@ -735,13 +738,13 @@ def cmd_update(args):
     return 0
 
 
-def cmd_memory(args):
+def cmd_memory(session_id, args):
     if not args:
         print('错误：缺少 xmind 文件路径', file=sys.stderr)
         return 1
 
     xmind_path = args[0]
-    mem = get_memory_path(xmind_path)
+    mem = get_memory_path(session_id, xmind_path)
 
     if os.path.exists(mem):
         with open(mem, 'r', encoding='utf-8') as f:
@@ -758,12 +761,34 @@ def print_usage():
 
 
 def main():
-    if len(sys.argv) < 2:
+    argv = sys.argv[1:]
+
+    if not argv or argv[0] in ('-h', '--help', 'help'):
+        print_usage()
+        sys.exit(0 if argv else 1)
+
+    # 解析 --session 参数
+    session_id = None
+    if '--session' in argv:
+        si = argv.index('--session')
+        if si + 1 < len(argv):
+            session_id = argv[si + 1]
+            argv = argv[:si] + argv[si + 2:]
+        else:
+            print('错误：--session 需要提供会话 ID', file=sys.stderr)
+            sys.exit(1)
+
+    if not session_id:
+        print('错误：缺少必填参数 --session <id>', file=sys.stderr)
         print_usage()
         sys.exit(1)
 
-    cmd = sys.argv[1]
-    rest = sys.argv[2:]
+    if not argv:
+        print_usage()
+        sys.exit(1)
+
+    cmd = argv[0]
+    rest = argv[1:]
 
     dispatch = {
         'parse': cmd_parse,
@@ -772,17 +797,13 @@ def main():
         'memory': cmd_memory,
     }
 
-    if cmd in ('-h', '--help', 'help'):
-        print_usage()
-        sys.exit(0)
-
     fn = dispatch.get(cmd)
     if fn is None:
         print(f'未知命令: {cmd}', file=sys.stderr)
         print_usage()
         sys.exit(1)
 
-    sys.exit(fn(rest))
+    sys.exit(fn(session_id, rest))
 
 
 if __name__ == '__main__':
