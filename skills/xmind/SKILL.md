@@ -20,9 +20,9 @@ python skills/xmind/scripts/xmind_tool.py --session <session-id> <command> [args
 
 所有命令都需要 `--session <id>` 参数，用于隔离不同会话的记忆文件。
 
-**会话 ID 管理规则：**
-- 在会话中首次使用本技能时，生成一个短 UUID 作为 session ID（例如 `a1b2c3d4`）
-- 在同一会话的后续调用中复用该 ID
+**会话 ID 获取规则（按优先级）：**
+1. 从上下文中获取：如果当前对话上下文中已存在之前使用过的 session ID，直接复用
+2. 生成新 ID：如果上下文中没有可用的 session ID，在首次调用前生成一个 UUID v4 格式的字符串（例如 `f47ac10b-58cc-4372-a567-0e02b2c3d479`），并在后续调用中持续复用
 - 记忆文件存储路径：`/tmp/skills-xmind-parsed/<session-id>/<filename>.md`
 
 ## 支持的格式
