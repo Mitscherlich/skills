@@ -1,7 +1,7 @@
 ---
 name: commit-push
 description: 当用户要求"提交代码"、"commit"、"推送代码"、"push"、"提交并推送"、"提交变更"、"推送到远程"、"帮我提交一下"、"把代码推上去"时，应使用此技能。此技能提供规范化的 git 提交与推送工作流，自动分析变更内容、生成符合规范的提交信息并执行相应操作。
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Git 提交与推送工作流
@@ -71,6 +71,12 @@ version: 0.2.0
 
 ```
 <type>[(scope)]: <message>
+
+<body>
+
+---
+
+Co-authored-by: claude <claude@anthropic.com>
 ```
 
 各部分说明：
@@ -82,22 +88,61 @@ version: 0.2.0
   - 多个模块 → 可省略 scope
   - 示例：`(auth)`、`(ui)`、`(api)`、`(config)`
 - **message**：一句话总结变更内容，不超过 15 个字
+- **body**：详细描述本次变更的内容，基于第三步的分析结果，列出关键变更点。每个要点独占一行，使用 `- ` 前缀
+- **Co-authored-by**：固定标签，标注 AI 协作者信息，以 `---` 分隔线与主体隔开
 
 #### 提交信息示例
 
 ```
 feat(auth): 新增用户登录功能
+
+- 新增 LoginForm 组件，支持用户名/密码登录
+- 新增 auth 模块，封装登录/登出/Token 刷新逻辑
+- 新增登录页路由配置
+
+---
+
+Co-authored-by: claude <claude@anthropic.com>
+```
+
+```
 fix(list): 修复分页数据加载异常
+
+- 修复分页参数未正确传递导致的数据重复加载问题
+- 修正页码从 0 开始的偏移错误
+
+---
+
+Co-authored-by: claude <claude@anthropic.com>
+```
+
+```
 docs: 更新 API 接口文档
-refactor(dal): 重构数据访问层
-chore: 更新 ESLint 规则配置
-test(utils): 新增工具函数单元测试
+
+- 补充用户模块接口的请求/响应示例
+- 更新认证相关接口的参数说明
+
+---
+
+Co-authored-by: claude <claude@anthropic.com>
 ```
 
 #### 执行提交
 
 1. 使用 `git add` 将相关文件添加到暂存区（优先添加具体文件，避免使用 `git add .`）
-2. 使用 `git commit -m "<提交信息>"` 执行提交
+2. 由于提交信息包含多行内容，使用 HEREDOC 方式传递提交信息：
+   ```bash
+   git commit -m "$(cat <<'EOF'
+   <type>[(scope)]: <message>
+
+   <body>
+
+   ---
+
+   Co-authored-by: claude <claude@anthropic.com>
+   EOF
+   )"
+   ```
 3. 如果提交因 git hook 失败，**禁止**使用 `--no-verify` 跳过验证，立即停止流程并告知用户具体的 hook 错误信息
 4. 确认提交成功后，向用户展示提交结果
 
