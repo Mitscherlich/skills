@@ -1,7 +1,7 @@
 ---
 name: commit-push
 description: 当用户要求"提交代码"、"commit"、"推送代码"、"push"、"提交并推送"、"提交变更"、"推送到远程"、"帮我提交一下"、"把代码推上去"时，应使用此技能。此技能提供规范化的 git 提交与推送工作流，自动分析变更内容、生成符合规范的提交信息并执行相应操作。
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Git 提交与推送工作流
@@ -76,7 +76,7 @@ version: 0.3.0
 
 ---
 
-Co-authored-by: claude <claude@anthropic.com>
+Co-authored-by: <model_name> <email>
 ```
 
 各部分说明：
@@ -89,7 +89,22 @@ Co-authored-by: claude <claude@anthropic.com>
   - 示例：`(auth)`、`(ui)`、`(api)`、`(config)`
 - **message**：一句话总结变更内容，不超过 15 个字
 - **body**：详细描述本次变更的内容，基于第三步的分析结果，列出关键变更点。每个要点独占一行，使用 `- ` 前缀
-- **Co-authored-by**：固定标签，标注 AI 协作者信息，以 `---` 分隔线与主体隔开
+- **Co-authored-by**：标注 AI 协作者信息，以 `---` 分隔线与主体隔开。根据当前 agent 自动填充签名（见下方签名映射表）
+
+#### Co-authored-by 签名映射
+
+根据当前运行的 AI agent 自动选择对应的签名：
+
+| Agent | 签名 |
+|-------|------|
+| Claude | `Co-authored-by: claude-4.5-sonnet <noreply@anthropic.com>` |
+| Gemini | `Co-authored-by: gemini-3-pro <noreply@google.com>` |
+
+**填充规则：**
+- 签名格式：`Co-authored-by: <model_name> <email>`
+- `model_name`：当前 agent 使用的模型名称（如 `claude-4.5-sonnet`、`gemini-3-pro`）
+- `email`：对应厂商的 noreply 邮箱
+- 如果无法识别当前 agent，默认使用 `ai-assistant <noreply@example.com>`
 
 #### 提交信息示例
 
@@ -102,7 +117,7 @@ feat(auth): 新增用户登录功能
 
 ---
 
-Co-authored-by: claude <claude@anthropic.com>
+Co-authored-by: <model_name> <email>
 ```
 
 ```
@@ -113,7 +128,7 @@ fix(list): 修复分页数据加载异常
 
 ---
 
-Co-authored-by: claude <claude@anthropic.com>
+Co-authored-by: <model_name> <email>
 ```
 
 ```
@@ -124,7 +139,7 @@ docs: 更新 API 接口文档
 
 ---
 
-Co-authored-by: claude <claude@anthropic.com>
+Co-authored-by: <model_name> <email>
 ```
 
 #### 执行提交
@@ -139,7 +154,7 @@ Co-authored-by: claude <claude@anthropic.com>
 
    ---
 
-   Co-authored-by: claude <claude@anthropic.com>
+   Co-authored-by: <model_name> <email>
    EOF
    )"
    ```
