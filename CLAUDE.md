@@ -59,6 +59,7 @@ version: <语义化版本号>
 
 | 技能 | 版本 | 说明 |
 |------|------|------|
+| `adr-driven-development` | 0.1.0 | ADR 驱动无人值守交付（grill → plan → goal → tmux runner → 验收） |
 | `xmind` | 0.2.0 | XMind 思维导图文件的解析、创建和更新 |
 | `commit-push` | 0.4.0 | 规范化的 git 提交与推送工作流 |
 | `iterm2` | 0.1.0 | 通过 iTerm2 Python API 控制 iTerm2 终端行为 |
