@@ -13,7 +13,8 @@
 #   - 不走任何可能交互式 read 的 shell 别名（如 run_with_proxy）
 #   - stream-json 日志 tee 落盘，哨兵靠它判进展
 #   - GOAL 文件包含工具 goal 指令 + 阶段提示词，runner 原样消费
-#   - runner 只写交付报告；验收报告由后续验收子代理写
+#   - runner 只写交付报告；验收报告由后续跨工具 reviewer 写（默认 ≠ IMPL）
+#   - 对抗验收：impl=claude-code → reviewer 默认 codex 或 grok（见 SKILL.md 配对表）
 set -eu
 SLICE="${1:?usage: launch-runner.sh <slice>}"
 
@@ -23,8 +24,10 @@ cd "$WT"
 
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 
-# ── 2. 实现子进程名称（必改）─────────────────────────────────
+# ── 2. 实现子进程名称（必改；验收请用另一工具，勿复用本脚本冒充对抗）──
 IMPL=claude-code
+# REVIEWER 仅作记录/环境提示；实际验收由主会话按 SKILL.md 另启 reviewer CLI
+# REVIEWER=codex
 
 # ── 3. 代理（按需保留/删除）─────────────────────────────────
 # P=http://127.0.0.1:7890

@@ -43,7 +43,8 @@ TASK: ADR <id> · <切片名>（<一行范围摘要>）
 - 只能实现本切片；不得推进下一片或修改 roadmap 状态。
 - 本地 commit，**绝不 push**
 - runner 退出前必须写报告；若遇到 BLOCKED 条件，报告写明 `BLOCKED`、证据和需要的人类决策。
-- runner 自报完成不等于阶段完成；阶段完成只能由验收子代理在 acceptance 报告中给出 `全部完成`。
+- runner 自报完成不等于阶段完成；阶段完成只能由 **与 impl 不同的 reviewer** 在 acceptance 报告中给出 `全部完成`。
+- runner 不得自行启动验收或修改 acceptance 报告。
 
 ## 统一 DoD
 
@@ -55,7 +56,7 @@ TASK: ADR <id> · <切片名>（<一行范围摘要>）
 - [ ] 门禁全绿：<命令> → <期望数字>
 - [ ] commit `feat(adr<id>-<slice>): ...` 产生
 - [ ] 报告写 `.adr/<id>/run/<impl>-<slice>-report.md`
-- [ ] 等待验收子代理写 `.adr/<id>/run/<impl>-<slice>-acceptance.md`，runner 不自行推进状态
+- [ ] 等待跨工具 reviewer 写 `.adr/<id>/run/<impl>-<slice>-acceptance.md`（文件头注明 impl/reviewer），runner 不自行推进状态
 - [ ] 没有修改 plan.md 的切片状态；状态推进只由核验步骤完成
 
 ## BLOCKED 条件（满足即停、报告写明）

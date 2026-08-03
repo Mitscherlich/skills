@@ -1,26 +1,30 @@
-# CLAUDE.md
+# AGENTS.md
 
-此文件为 Claude Code 提供项目级别的上下文和指导规范。技能本身是多 Agent 通用的，不绑定 Claude。
+此文件为多 Agent 工具（Codex / Claude Code / Grok / 其他）提供项目级别的上下文和指导规范。
 
 ## 项目概述
 
-`@m9ch/skills` 是一个可复用的 AI 技能（Skills）集合仓库。每个技能是一个独立的功能模块，提供特定领域的专业能力，供 Claude Code 及其他 coding agent 调用。
+`@m9ch/skills` 是一个可复用的 AI 技能（Skills）集合仓库。每个技能是一个独立的功能模块，提供特定领域的专业能力，供各类 coding agent 在对话中调用——**不绑定单一厂商**。
 
 ## 项目结构
 
 ```
-skills/                     # 技能源目录（唯一真相源）
+skills/                     # 技能源目录（唯一真相源，所有技能存放于此）
 ├── <skill-name>/           # 单个技能目录
 │   ├── SKILL.md            # 技能说明文档（必需）
 │   └── scripts/            # 技能脚本（如有）
 │       └── *.py / *.sh     # 实现脚本
 .agents/
-└── skills -> ../skills     # 多 Agent 通用入口（优先保证此路径可用）
+└── skills -> ../skills     # 多 Agent 通用入口（Codex / Grok / 通用 skills 发现路径）
 .claude/
-└── skills -> ../skills     # Claude Code 兼容入口（与 .agents 同源）
+└── skills -> ../skills     # Claude Code 兼容入口（与 .agents 指向同一源）
 ```
 
-约定：改技能只改 `skills/`；不要在 `.claude/skills` 或 `.agents/skills` 内另存副本。
+约定：
+
+- **改技能只改 `skills/`**；`.agents/skills` 与 `.claude/skills` 均为相对符号链接，禁止在链接目录内另存副本。
+- 优先保证 `.agents/skills` 可用，避免技能仅对 Claude 可见。
+- 新增 agent 适配时，优先挂 `.agents/skills`，不要再复制一份技能树。
 
 ## 技能开发规范
 
