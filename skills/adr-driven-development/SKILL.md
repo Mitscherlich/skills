@@ -1,7 +1,7 @@
 ---
 name: adr-driven-development
-description: Use when the user wants an ADR-driven unattended delivery loop, asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation through tmux or Orca (orca-cli worktree + impl/reviewer agent fan-out) with --impl and cross-tool --reviewer adversarial acceptance.
-version: 0.3.1
+description: Use when the user wants an ADR-driven unattended delivery loop, asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation with detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
+version: 0.4.0
 ---
 
 # ADR 驱动开发（grill → loop → host runner 无人值守实现）
