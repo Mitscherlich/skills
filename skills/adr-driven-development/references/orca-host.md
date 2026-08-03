@@ -13,7 +13,8 @@
 - 以输出的 `host=` / `orca_cli=` / `reason=` 为准。
 - **`host` 不是 `orca` 时不要读本手册**（省 token）。
 - 后续所有 `ORCA ...` 命令中的可执行名 = 脚本字段 `orca_cli`（可能是 `orca` / `orca-dev` / `orca-ide` / `ORCA_CLI_COMMAND` 的值）。
-- 用户 `--host=` → `detect-runtime-host.sh --force <host>` 或环境变量 `ADR_HOST=`。
+- 用户 `--host=` / `ADR_HOST=` → `detect-runtime-host.sh --force <host>`，这是严格选择，不可用即失败；仅偏好且允许降级时用 `--prefer <host>`。
+- `--force tmux` 必须完全不调用 Orca；自动探测或 `--prefer` 失败降级才是 prefer 语义。
 
 将脚本完整输出贴进 progress.md 启动行即可，例如：
 
@@ -22,6 +23,9 @@ host=orca
 orca_cli=orca
 reason=orca env signals present and cli status ok
 worktree_id=<repoId>::<absPath>   # create 后再补
+setup=inherit                       # run|skip|inherit，按 plan
+base_sha=<lockedBaseSha>
+plan_sha256=<verifiedPlanHash>
 impl_agent=claude
 reviewer_agent=codex
 ```
@@ -42,7 +46,9 @@ ORCA skills get orca-cli
 | `codex` | `codex` | |
 | `grok` | `grok` | |
 
-跨工具配对规则仍按主 SKILL：默认 reviewer ≠ impl。Orca 下同样禁止默认同 agent 自检。
+跨工具配对规则仍按主 SKILL：默认 reviewer ≠ impl。Orca 下同样禁止默认同 agent 自检；任何同工具验收都须先取得用户明确授权并记入 plan/progress，「只剩一个工具」只触发询问。
+
+权限默认最小化。plan 必须记录 impl/reviewer 的命令与 threat model；例如 Claude 默认 `claude --permission-mode default`，只有用户已授权才可写成 `claude --permission-mode bypassPermissions`。Codex 使用 `codex --sandbox workspace-write`；danger sandbox 或同类 bypass 也只在 plan 有明确授权时启用。
 
 ## 一次 ADR 一个 Orca worktree（隔离执行区）
 
@@ -56,18 +62,22 @@ ORCA skills get orca-cli
 ORCA worktree create \
   --name adr-<id>-<slug> \
   --parent-worktree active \
+  --setup <run|skip|inherit> \
   --json
 ```
 
 要点：
 
 - 需要挂在当前任务树下时用 `--parent-worktree active`；完全独立顶层任务才用 `--no-parent`。
-- **不要**在 `worktree create` 上同时挂 `--agent` 做第一片实现——先落空 worktree（或仅 setup），再按切片扇出 terminal agent，便于一片一 handle、一报告。
+- setup policy 必须先在 plan 记录为 `setup=run|skip|inherit`，再显式传 `--setup`；不要让仓库默认 setup 成为未审计副作用。
+- 若 F1 goal 已就绪，可用 `worktree create --agent <impl> --prompt <goal>` 一次性创建执行区并点火，但必须仍保持“一 ADR 一 worktree”、后续 reviewer/F2 复用同一 ADR worktree 的语义；goal 未就绪时先 bare create，再 `terminal create`。
 - 若 CLI 较旧不支持某些 flag：先 `worktree create --name ... --json`，再用 `terminal create`。
 - 从 create 响应抄写完整 `worktree.id`（格式 `<repoId>::<path>`），以及 path；写入 `.adr/<id>/progress.md` 与 plan 头注释。
-- 在该 path 下创建 `.adr/<id>/`，后续所有绝对路径基于此 worktree path。
+- 创建后从 `source_worktree` 用 `cp -a` 或 `rsync` 迁入 `.adr/<id>/`，核对 plan 记录的 `plan_sha256`；执行区必须从锁定的 `base_sha` 起步。
+- 若实现依赖 source checkout 的 dirty 业务改动，暂停让用户选择先 commit / patch 导入 / 改用当前 checkout，禁止静默丢失。
+- 在执行区运行 `git config remote.origin.pushurl no_push`（或等价硬禁 push）并验证；后续所有绝对路径基于该 worktree path。
 - 分支名尽量 `feat/adr<id>-<slug>`（Orca/checkout 若另有命名，以实际 branch 为准并记入 plan）。
-- **绝不 push**。
+- `.adr/` 的 commit/归档与 dirty allowlist 以 plan 的 control-plane 策略为准；impl 避免无边界 `git add -A`。**绝不 push**。
 
 可选状态：
 
@@ -89,14 +99,15 @@ goal 已写入 worktree 内绝对路径 `.../.adr/<id>/next-goal.md` 后：
 ```text
 ORCA terminal create \
   --worktree id:<repoId>::<adrWorktreePath> \
-  --title adr-<slice>-impl \
-  --command <impl_orca_agent> \
+  --title adr-<id>-<slice>-impl-<attempt> \
+  --command "<impl_agent_with_plan_authorized_permission_flags>" \
   --json
 ```
 
 - `<impl_orca_agent>`：`claude` / `codex` / `grok`（映射表）。
-- 从响应取 `handle`（或 `startupTerminal.handle`）；写入 progress：`impl_handle=...`。
-- 若 handle 返回 `terminal_handle_stale`：`terminal list --worktree id:... --json` 重新获取，**只**对新 handle 操作。
+- 从 create 响应优先取 `agentTerminalHandle`，兼容旧版 `startupTerminal.handle`；写入 progress：`impl_handle=...`。
+- 若返回 `terminal_handle_stale`，先 `terminal list --worktree id:... --json`，再按 worktree id、完整 title、command/agent 与当前 attempt 四项重绑；**只**对新 handle 操作，禁止双发。
+- 故障恢复先核对 title/handle，再用 `ORCA terminal close --terminal <handle>` 精确关闭并重建；**禁止**默认使用会停止整个 worktree 的 `terminal stop --worktree`。
 
 等 TUI 就绪后投递任务（prompt 必须指向绝对路径，避免上下文丢失）：
 
@@ -105,17 +116,17 @@ ORCA terminal wait --terminal <impl_handle> --for tui-idle --timeout-ms 60000 --
 ORCA terminal send --terminal <impl_handle> --text "Read and execute the self-contained goal at <ABS>/.adr/<id>/next-goal.md. Work only in this worktree. Write the delivery report to <ABS>/.adr/<id>/run/<impl>-<slice>-report.md. Local commit only; never push. Do not advance plan.md roadmap status." --enter --json
 ```
 
-若 goal 较短且 agent 支持 create 时 `--prompt`，也可在 **新切片专用子 worktree** 场景用 `worktree create --agent --prompt`；**本 skill 默认同一 ADR worktree + terminal create**，避免多 checkout 分叉。
+F1 在 goal 已就绪时可用 `worktree create --agent <impl> --prompt <ABS-goal>` 点火；该 create 得到的 worktree 就是本 ADR 唯一执行区，后续 reviewer/F2 必须复用它，不得再建“新切片专用子 worktree”。goal 尚未就绪或复用既有 ADR worktree 时，使用 `terminal create`。
 
 ### 完成判定（主会话 / 哨兵）
 
-**文件哨兵优先**（与 host 无关）：
+**attempt 哨兵优先**（与 host 无关），不得只检查固定路径存在：
 
-1. 存在 `.adr/<id>/run/<impl>-<slice>-report.md`
-2. 有本片相关 commit（`git log` / `git status` 在 worktree path 内）
-3. 可选：terminal 已 `tui-idle` 且近期无新输出
+1. report 的 `attempt_id`、`goal_sha256`、`base_sha` 与当前 goal 一致，`head_sha` 对应本片 commit。
+2. report mtime 晚于本轮 goal 写入与 archive 动作；re-open 前旧 report/acceptance 已归档到 `run/archive/<attempt_id>/`，或产物路径本身含 attempt。
+3. terminal 已 `tui-idle` / 退出并冻结，当前 HEAD 等于 report 的 `head_sha`。
 
-**不要**把「agent 口头说做完了」当完成。报告齐备 → 进入小周期 3。
+报告先写临时文件后 atomic rename。**不要**把 agent 口头完成或旧固定路径文件当完成；全部绑定通过才进入小周期 3。
 
 ### 日志
 
@@ -131,14 +142,14 @@ impl 完成后，主会话写好 acceptance-prompt 绝对路径，再开 **另�
 ```text
 ORCA terminal create \
   --worktree id:<repoId>::<adrWorktreePath> \
-  --title adr-<slice>-review \
-  --command <reviewer_orca_agent> \
+  --title adr-<id>-<slice>-review-<attempt> \
+  --command "<reviewer_agent_with_plan_authorized_permission_flags>" \
   --json
 ORCA terminal wait --terminal <review_handle> --for tui-idle --timeout-ms 60000 --json
 ORCA terminal send --terminal <review_handle> --text "You are the adversarial reviewer (impl=<impl>, reviewer=<reviewer>). Read <ABS>/.adr/<id>/run/<impl>-<slice>-acceptance-prompt.md and execute it. Write ONLY the acceptance report to <ABS>/.adr/<id>/run/<impl>-<slice>-acceptance.md with header impl=/reviewer=. Conclusion must be exactly one of: 全部完成 / 未完成 / BLOCKED. Do not change product code, do not commit, do not edit plan.md status." --enter --json
 ```
 
-完成判定：acceptance 报告存在且结论三选一。然后主会话推进 roadmap。
+reviewer 只写 acceptance（及只读复跑测试），不改业务代码、commit 或 plan 状态。review 前后比较 diff；acceptance allowlist 外出现新增 diff 即 `BLOCKED`。acceptance 先写临时文件后 atomic rename；只有其 `attempt_id` / `goal_sha256` / `base_sha` / reviewed `head_sha` / mtime 与当前轮匹配，且当前 HEAD 等于 reviewed head，才允许主会话推进 roadmap。
 
 card 状态建议：
 
@@ -153,15 +164,15 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 
 ## 哨兵（host=orca）
 
-每 10 分钟：
+每 10 分钟先用原子 `mkdir .adr/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 锁；未抢到立即退出，锁拥有者完成后释放，避免两个 tick 重复扇出。然后：
 
 1. `ORCA terminal list --worktree id:<...> --json` — impl/review handle 是否仍在
 2. `ORCA terminal read --terminal <handle> --json`（或 cursor）— 最近动作摘要
-3. worktree 内 `git log --oneline -3`、报告文件是否出现、roadmap open 片
+3. worktree 内 `git log --oneline -3`、当前 attempt 的 report/acceptance 绑定与 mtime、roadmap open 片
 4. 停滞：handle 仍在但输出/文件无进展 → 疑似停滞×N；连续 2 次通知用户
-5. impl 报告已齐且仍 open → 启动 reviewer；acceptance 已齐 → 主会话核验结论
+5. impl 报告绑定齐且仍 open → 启动 reviewer；acceptance 绑定齐且 HEAD 等于 reviewed head → 主会话核验结论
 
-可用 Orca automations 做巡检，但默认仍用当前 agent 环境的定时任务机制，与 tmux 路径一致。
+默认定时机制多为会话级，协调者退出即 loop 停止。长 loop 应使用 Orca automations（或明确的持久调度器），并沿用同一 attempt/锁协议。
 
 ## 与 orchestration skill 的边界
 
@@ -176,6 +187,7 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 | 探测到 Orca 但 `status` 失败 / CLI 缺失 | 记 progress，**降级 host=tmux**（或 paused 待用户装 Orca） |
 | `worktree create` 失败 | 可回退 `git worktree add` + host=tmux；不得内联实现 |
 | `terminal create --command` 不识别 agent | 查本机已装 agent；换配对或请用户安装 |
+| 单 terminal 卡死 / handle stale | 核对 worktree+title+attempt 后 `terminal close --terminal <handle>`，重建并生成新 attempt；禁止默认 `terminal stop --worktree` |
 | 用户 `--host=tmux` | 全程走 launch-runner.sh + tmux，忽略 Orca 扇出 |
 
 ## 最小命令清单（备忘）
@@ -183,14 +195,15 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 ```text
 ORCA status --json
 ORCA worktree current --json
-ORCA worktree create --name adr-<id>-<slug> --parent-worktree active --json
+ORCA worktree create --name adr-<id>-<slug> --parent-worktree active --setup <policy> --json
 ORCA worktree set --worktree id:<repoId>::<path> --comment "..." --json
 ORCA worktree set --worktree id:<repoId>::<path> --workspace-status in-progress --json
-ORCA terminal create --worktree id:<repoId>::<path> --title adr-f1-impl --command claude --json
+ORCA terminal create --worktree id:<repoId>::<path> --title adr-<id>-f1-impl-<attempt> --command "claude --permission-mode default" --json
 ORCA terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 ORCA terminal send --terminal <handle> --text "..." --enter --json
 ORCA terminal list --worktree id:<repoId>::<path> --json
 ORCA terminal read --terminal <handle> --json
+ORCA terminal close --terminal <handle> --json
 ```
 
 命令 flag 以 `ORCA skills get orca-cli` 为准；若与上文冲突，**以二进制指南为准**并更新本文件。

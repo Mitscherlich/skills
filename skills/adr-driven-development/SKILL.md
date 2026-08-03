@@ -8,7 +8,7 @@ version: 0.3.1
 
 把一个模糊的大需求变成「已核验的一串本地 commit」的完整流水线。人只在两个点介入：前期 grill 对话（裁决设计），以及 runner 点火被权限拦截时手动执行一条命令。其余全部自动。
 
-**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh` 拿结果，**禁止**靠读文档/环境变量自行推理 host（浪费 token 且易漂）。默认倾向 `tmux`；脚本在 Orca 环境且 CLI 健康时返回 `orca`。可用 `--host=` / `ADR_HOST=` / 脚本 `--force` 覆盖。
+**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh` 拿结果，**禁止**靠读文档/环境变量自行推理 host（浪费 token 且易漂）。默认倾向 `tmux`；脚本在 Orca 环境且 CLI 健康时返回 `orca`。用户 `--host=` / `ADR_HOST=` 映射到脚本的严格 `--force`；仅“优先某 host、失败可降级”时使用 `--prefer`。
 
 ## 硬性执行契约
 
@@ -23,7 +23,7 @@ version: 0.3.1
 - **禁止跳过 grill 直接实现**。只有两种例外：用户明确说已有设计可跳过 grill，或 `.adr/<id>/plan.md` 已存在且包含已确认的「决策 + roadmap + DoD」。例外也要在 progress.md 记下原因。
 - **禁止主会话内联实现切片代码**。主会话只做 grill、plan/goal 编排、host 解析、runner 点火、巡检、核验和报告；业务代码变更必须由 **host 上的 impl runner**（tmux session 或 Orca agent terminal）完成。若 host 点火失败，记录为 `paused(待点火)` 并通知用户，**不**自动退化为内联实现；Orca 探测失败可降级 `host=tmux`，仍不得内联。
 - **禁止把 runner 自报完成当成完成**。impl 退出后必须委派**验收 reviewer**（默认与 impl **不同**的 agent 工具）做对抗式检查；没有验收 reviewer 的「全部完成」结论，就不能把下一片置为 open，也不能进入最终汇总。
-- **禁止默认同工具自检冒充对抗验收**。未显式指定 `--reviewer=` 时，必须按下方默认配对表选择与 `--impl` 不同的工具；仅当用户明确允许，或环境里只剩一个可用工具时，才可同工具验收，并在 progress.md / 确认记录写明原因。
+- **禁止默认同工具自检冒充对抗验收**。未显式指定 `--reviewer=` 时，必须按下方默认配对表选择与 `--impl` 不同的工具。**任何同工具验收都必须先取得用户明确授权，并在 plan.md 确认记录与 progress.md 写明授权原文/原因**；「只剩一个工具」只触发询问，不自动豁免。
 
 ## 可选依赖（开源安装）
 
@@ -69,12 +69,12 @@ version: 0.3.1
 | 文件 | 角色 |
 |---|---|
 | `plan.md` | ADR 决策记录 + 切片 roadmap（**单一事实源**；含 host / impl / reviewer 确认） |
-| `next-goal.md` | 当前切片的自包含 goal（impl runner 的唯一输入） |
+| `next-goal.md` | 当前切片的自包含 goal（impl runner 的唯一输入；含 attempt 与 hash 绑定） |
 | `progress.md` | 巡检日志 + 切片状态表 + host/worktree/handle 记录 |
 | `run/launch-runner.sh` | **仅 host=tmux**：impl 启动器（见 scripts/launch-runner-template.sh） |
 | `run/<impl>-<slice>.log` | impl 日志（tmux: stream-json；orca: terminal read 摘要亦可） |
-| `run/<impl>-<slice>-report.md` | 每片交付报告（impl 写） |
-| `run/<impl>-<slice>-acceptance-prompt.md` | 验收 prompt（主会话写，reviewer 唯一输入） |
+| `run/<impl>-<slice>-report.md` | 每片交付报告（impl 写；也可把 attempt 写入文件名） |
+| `run/<impl>-<slice>-acceptance-prompt.md` | 验收 prompt（主会话写，reviewer 唯一输入；也可把 attempt 写入文件名） |
 | `run/<reviewer>-<slice>-acceptance.log` | reviewer 运行日志 / 摘要 |
 | `run/<impl>-<slice>-acceptance.md` | 每片验收报告（reviewer 写，全部完成/未完成/BLOCKED + impl/reviewer 头） |
 
@@ -102,6 +102,16 @@ grill 完成标准：
 
 plan.md 模板见 `references/plan-template.md`。
 
+### `.adr` lifecycle 与执行区交接
+
+grill 可以先在当前 checkout 写 `.adr/<id>/`，但进入执行 worktree 前必须完成以下交接，不能假设未提交文件会自动出现：
+
+1. 在已确认 plan 中记录 `source_worktree`、执行区锁定的 `base_sha` 与原文件的 `plan_sha256`。
+2. 创建目标 worktree 后，由协调者用 `cp -a <source>/.adr/<id> <target>/.adr/` 或等价 `rsync` 迁入；重新计算并核对 `plan_sha256`，不一致即暂停。
+3. 若实现依赖 source checkout 的 dirty、未提交业务改动，暂停让用户明确选择：先 commit、生成 patch 并显式导入，或改用当前 checkout。禁止静默丢弃、猜测性复制或从错误 base 启动。
+4. `.adr/` 是 control-plane；默认建议与 feature 分支一起 commit，使 plan/goal/report/acceptance 可审计。若 plan 选择不提交，则必须列出每片允许的 control-plane dirty path，impl 暂存只用路径 allowlist，避免无边界 `git add -A`。
+5. 收尾先确认 `.adr/` 已随分支提交或另行归档并记录位置；只有得到用户对归档与清理的确认后，才允许 `worktree rm`。
+
 ## 阶段 2：loop 小周期
 
 进入阶段 2 前先检查 plan.md 的确认记录；缺失就回到阶段 1，不创建 runner。
@@ -115,6 +125,8 @@ plan.md 模板见 `references/plan-template.md`。
 <path-to-skill>/scripts/detect-runtime-host.sh
 # 用户指定 --host=orca|tmux 时：
 <path-to-skill>/scripts/detect-runtime-host.sh --force orca   # 或 tmux
+# 仅偏好，目标不可用时允许自动降级：
+<path-to-skill>/scripts/detect-runtime-host.sh --prefer orca  # 或 tmux
 # 机器可读：
 <path-to-skill>/scripts/detect-runtime-host.sh --json
 ```
@@ -132,9 +144,9 @@ plan.md 模板见 `references/plan-template.md`。
 
 优先级（脚本已内置，agent 只需传参）：
 
-1. `--force` / 环境变量 `ADR_HOST` / 用户 `--host=`
-2. 自动：Orca 信号 + CLI `status` 健康 → `orca`，否则 `tmux`
-3. 想要 orca 但 CLI 挂了 → 脚本自动降级 `tmux` 并写 `reason`
+1. 用户 `--host=` / 环境变量 `ADR_HOST` / 脚本 `--force`：严格选择；不可用即非零退出，不降级。
+2. 脚本 `--prefer`：优先目标 host；不可用时允许降级并在 `reason` 记录。
+3. 自动：Orca 信号 + CLI `status` 健康 → `orca`，否则偏好式降级 `tmux`。`--force tmux` 必须完全不探测、不调用 Orca。
 
 | 退出码 | 含义 |
 |---|---|
@@ -148,27 +160,31 @@ plan.md 模板见 `references/plan-template.md`。
 ### 隔离执行区
 
 - **host=tmux**：`git worktree add`，分支 `feat/adr<id>-<slug>`。
-- **host=orca**：`ORCA worktree create --name adr-<id>-<slug> ...`（优先 `--parent-worktree active`），**一次 ADR 一个 Orca worktree**；impl 与 reviewer **共用该 checkout**（禁止为 reviewer 再开平行 worktree 导致看不到 impl commit）。
+- **host=orca**：`ORCA worktree create --name adr-<id>-<slug> ...`（优先 `--parent-worktree active`），**一次 ADR 一个 Orca worktree**；impl 与 reviewer **共用该 checkout**（禁止为 reviewer 再开平行 worktree 导致看不到 impl commit）。plan 必须记录 `setup=run|skip|inherit`。
 
-`.adr/<id>/` 放在 worktree 内随分支走。**绝不 push**。
+完成 lifecycle 交接后，在执行 worktree 立刻运行 `git config remote.origin.pushurl no_push`（或等价的无效 push URL）做硬禁 push，并验证配置生效。`.adr/<id>/` 放在 worktree 内按 plan 的 control-plane 策略随分支走；**绝不 push**。
 
 Orca 详细命令与扇出步骤见 `references/orca-host.md`；操作前应 `ORCA skills get orca-cli` 核对当前 CLI 语法。
 
 ### 哨兵（定时巡检）
 
-创建一个**每 10 分钟触发的定时任务**（用当前环境可用的定时机制；选一个避开整点的分钟数，减少与他人任务撞点）。定时任务的 prompt 就是巡检指令，要求每次：
+创建一个**每 10 分钟触发的定时任务**（用当前环境可用的定时机制；选一个避开整点的分钟数，减少与他人任务撞点）。多数定时器是会话级：协调者退出即 loop 停止；需要跨会话长跑时使用 Orca automations 或明确的持久调度器。每个 tick 先用原子的 `mkdir .adr/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 阶段锁；未抢到就退出，锁拥有者结束时释放，避免重复扇出 reviewer/重复推进。
+
+定时任务的 prompt 要求每次：
 
 1. 一次命令汇总：
    - **tmux**：session 存活性、日志行数、`tail -c 2000`、`git log --oneline -3`、open 切片
    - **orca**：`terminal list` / `terminal read`、报告文件是否出现、`git log --oneline -3`（在 ADR worktree path）、open 切片
 2. 停滞判定：runner/agent 仍在但日志或文件无进展 → 记「疑似停滞×N」，连续 2 次**主动通知用户**。
 3. 往 `progress.md` 巡检表**追加一行**（时间/切片/host/runner 状态/提交数/要点）。
-4. impl 完成（报告齐）且该片仍 open → 进入小周期 3 跨工具 reviewer。
+4. impl 完成（当前 attempt 的报告齐且该片仍 open）→ 进入小周期 3 跨工具 reviewer。
 5. loop 收官后删除该定时任务。
+
+完成哨兵不得只检查固定路径文件存在。当前产物必须满足：`attempt_id` 与本轮一致；`goal_sha256` 与当前 goal 一致；报告/验收的 mtime 晚于本轮 goal 与归档动作；报告的 `base_sha`、`head_sha` 可验证。re-open 切片前必须把上一轮 report/acceptance 移入 `run/archive/<attempt_id>/`，或改用含 attempt 的新产物路径。
 
 ### 小周期 1：goal 编译
 
-每片一次，委派 goal 编译子代理：
+每片每次点火生成不可复用的 `attempt_id`，再委派 goal 编译子代理：
 
 - 输入：plan.md 的该片行 + 相关 ADR 决策 + 上一片报告 + 现状代码锚点。
 - **结构契约**：输出必须符合 `references/goal-template.md`（自包含 next-goal.md）。
@@ -176,6 +192,7 @@ Orca 详细命令与扇出步骤见 `references/orca-host.md`；操作前应 `OR
 - 阶段提示词、代码锚点、分阶段任务、DoD、验收 checklist、BLOCKED 条件始终按 goal-template 补齐。
 - ⚠️ **写入路径必须显式写绝对路径到 worktree 的 `.adr/<id>/next-goal.md`**。血泪教训：agent 曾写到主仓导致 runner 读到旧 goal 困惑退出。prompt 里把目标路径原文写出来并要求 agent 写完后自检。
 - goal 编译 agent 只写 next-goal.md，不改业务代码、不提交、不点火。
+- next-goal.md 顶部记录 `attempt_id`、`plan_sha256`、`goal_sha256`（写完后计算并记录其约定口径）、`base_sha`、编译时 `head_sha`；impl report 与 acceptance 必须回写同一组绑定字段以及各自产生时的 `head_sha`。
 
 完成标准：next-goal.md 已存在，包含 goal 指令、实现提示词、验收 checklist、完成条件、暂停条件、报告路径，并且没有占位符。
 
@@ -185,21 +202,23 @@ runner 的唯一任务输入是 `.adr/<id>/next-goal.md`（工具 goal 指令 + 
 
 #### host=tmux
 
-首次进入小周期 2 时，从 `scripts/launch-runner-template.sh` 复制到 `.adr/<id>/run/launch-runner.sh`，改 worktree 绝对路径、impl 名称、代理、impl 命令行：
+首次进入小周期 2 时，从 `scripts/launch-runner-template.sh` 复制到 `.adr/<id>/run/launch-runner.sh`，按模板注释改完五处配置（包括 `ADR_ID`、worktree 绝对路径、impl 名称、代理、impl 命令行）：
 
 - **绝对路径**：tmux 新 session 不继承 shell；PATH/cwd 显式写。
 - **不走交互式别名**：含 `read` 的代理别名会卡死无人值守 session。
 - **stream-json 日志 tee 落盘**：哨兵靠行数与 tail 判进展。
+- **权限 flag 必改**：默认使用工具的最小权限（Codex 为 `--sandbox workspace-write`）；模板中的 `bypassPermissions` / danger 例子只有 plan 已记录用户明确授权时才能启用。
 
 点火：
 
 ```bash
-tmux new-session -d -s adr-<slice> '<worktree>/.adr/<id>/run/launch-runner.sh <slice>'
+tmux new-session -d -s adr-<id>-<slice> 'sh <worktree>/.adr/<id>/run/launch-runner.sh <slice>'
+# 或先 chmod +x，再直接执行 launcher
 ```
 
 被权限拦截时 progress 记「待点火」，给用户可 `!` 执行的完整命令；下一 tick 可重试。
 
-一片一个 tmux session（`adr-f1`…）。同一时间只有一个 impl 在跑。
+一片一个 tmux session（`adr-<id>-<slice>`）。同一时间只有一个 impl 在跑。
 
 #### host=orca（扇出 impl agent）
 
@@ -209,13 +228,13 @@ tmux new-session -d -s adr-<slice> '<worktree>/.adr/<id>/run/launch-runner.sh <s
 2. 在该 worktree 扇出 **impl** terminal（agent 映射：`claude-code`→`claude`，`codex`→`codex`，`grok`→`grok`）：
 
 ```text
-ORCA terminal create --worktree id:<repoId>::<path> --title adr-<slice>-impl --command <impl_orca_agent> --json
+ORCA terminal create --worktree id:<repoId>::<path> --title adr-<id>-<slice>-impl-<attempt> --command <impl_command_with_plan_authorized_permissions> --json
 ORCA terminal wait --terminal <impl_handle> --for tui-idle --timeout-ms 60000 --json
 ORCA terminal send --terminal <impl_handle> --text "Read and execute <ABS>/.adr/<id>/next-goal.md; write report to <ABS>/.adr/<id>/run/<impl>-<slice>-report.md; local commit only; never push; do not edit plan.md status." --enter --json
 ```
 
-3. **完成判定以文件哨兵为准**：存在 `run/<impl>-<slice>-report.md` 且有本片 commit；不要只听 agent 口述。
-4. progress 记录 `impl_handle`；handle 失效时用 `terminal list` 重取，禁止双发。
+3. **完成判定按 attempt 哨兵协议**：不能只看固定路径存在；核对 report 的 `attempt_id` / `goal_sha256` / `base_sha` / `head_sha`、mtime 与 commit；不要只听 agent 口述。
+4. progress 记录 `impl_handle`；create 响应优先取 `agentTerminalHandle`，兼容 `startupTerminal.handle`。handle 失效时用 `terminal list` 按 worktree+完整 title+command 重取，禁止双发。
 5. 可选：`worktree set --workspace-status in-progress` / `--comment "…"`。
 
 ### impl 与 reviewer 选项
@@ -228,9 +247,9 @@ ORCA terminal send --terminal <impl_handle> --text "Read and execute <ABS>/.adr/
 
 | 工具 | Orca agent id | host=tmux 启动核心（impl 读 next-goal；reviewer 读 acceptance-prompt） |
 |---|---|---|
-| `claude-code` | `claude` | `claude -p --permission-mode bypassPermissions --verbose --output-format stream-json < <input>` |
-| `codex` | `codex` | `codex exec --full-auto "$(cat <input>)"`（或 `--json`） |
-| `grok` | `grok` | `grok --prompt-file <input> --permission-mode bypassPermissions --output-format streaming-json` |
+| `claude-code` | `claude` | `claude -p --permission-mode default --verbose --output-format stream-json < <input>`；仅 plan 记录授权后可改 `bypassPermissions` |
+| `codex` | `codex` | `codex exec --sandbox workspace-write - < <input>`；`--full-auto` 是废弃别名，有权限扩大与未来移除风险 |
+| `grok` | `grok` | `grok --prompt-file <input> --output-format streaming-json`；仅 plan 记录授权后可加 danger/bypass 模式 |
 
 goal / 验收 prompt 内容与 host 无关——产物自包含。
 
@@ -246,9 +265,9 @@ goal / 验收 prompt 内容与 host 无关——产物自包含。
 
 解析规则：
 
-1. 用户显式 `--reviewer=X`：用 X；若 `X == impl`，**警告**并请确认；未确认则改回默认配对。
+1. 用户显式 `--reviewer=X`：用 X；若 `X == impl`，**警告**并请用户明确授权；未授权不得启动同工具验收。
 2. 用户未指定：按上表选与 impl 不同的工具。
-3. 候选均不可用：告知用户；**不得**静默同工具验收。
+3. 候选均不可用或只剩一个工具：告知用户并询问是否授权同工具；**不得**静默同工具验收。
 4. 将最终 `host` / `impl` / `reviewer` 写入 plan 确认记录与 progress。
 
 ### 小周期 3：跨工具对抗验收（reviewer）
@@ -258,28 +277,28 @@ impl 完成后，必须启动 **reviewer**（默认 ≠ impl）。主会话**不
 #### 启动前
 
 1. 解析 `impl` / `reviewer` / `host`。
-2. 主会话写自包含验收 prompt 到 worktree 绝对路径：
+2. 核对 impl 已退出/idle，冻结其 terminal；记录当前 HEAD。主会话写自包含验收 prompt 到 worktree 绝对路径：
    `.adr/<id>/run/<impl>-<slice>-acceptance-prompt.md`
-   （含切片原文、路径、git 范围、门禁、验收报告输出路径、对抗清单、结论三选一）。
+   （含切片原文、路径、git 范围、门禁、验收报告输出路径、`attempt_id` / `goal_sha256` / `base_sha` / 待验 `head_sha`、对抗清单、结论三选一）。
 3. 按 host 启动 reviewer：
 
 **host=tmux** — headless / tmux session，日志 tee 到 `run/<reviewer>-<slice>-acceptance.log`：
 
 | reviewer | 命令骨架 |
 |---|---|
-| `claude-code` | `claude -p --permission-mode bypassPermissions --verbose --output-format stream-json < "$PROMPT"` |
-| `codex` | `codex exec --full-auto "$(cat "$PROMPT")"` |
-| `grok` | `grok --prompt-file "$PROMPT" --permission-mode bypassPermissions --output-format streaming-json` |
+| `claude-code` | `claude -p --permission-mode default --verbose --output-format stream-json < "$PROMPT"`；bypass 仅限已记录授权 |
+| `codex` | `codex exec --sandbox workspace-write - < "$PROMPT"`（只允许 acceptance 路径） |
+| `grok` | `grok --prompt-file "$PROMPT" --output-format streaming-json`；danger/bypass 仅限已记录授权 |
 
 **host=orca** — **同一 ADR worktree** 再扇出 reviewer terminal（agent id 用映射表）：
 
 ```text
-ORCA terminal create --worktree id:<repoId>::<path> --title adr-<slice>-review --command <reviewer_orca_agent> --json
+ORCA terminal create --worktree id:<repoId>::<path> --title adr-<id>-<slice>-review-<attempt> --command <reviewer_command_with_plan_authorized_permissions> --json
 ORCA terminal wait --terminal <review_handle> --for tui-idle --timeout-ms 60000 --json
 ORCA terminal send --terminal <review_handle> --text "Execute acceptance prompt at <ABS>/...-acceptance-prompt.md; write ONLY <ABS>/...-acceptance.md (impl=/reviewer= header; 全部完成|未完成|BLOCKED). No code changes, no commit, no plan.md status edits." --enter --json
 ```
 
-完成判定：acceptance 文件存在且结论合法。可选 `workspace-status in-review`。
+完成判定：acceptance 必须按 atomic rename 发布，且 attempt/hash/mtime/结论全部合法；当前 HEAD 必须等于 acceptance 的 reviewed `head_sha`。可选 `workspace-status in-review`。
 
 #### 对抗检查清单（写入 prompt，reviewer 必须逐项给证据）
 
@@ -292,24 +311,24 @@ ORCA terminal send --terminal <review_handle> --text "Execute acceptance prompt 
 
 #### 验收产出
 
-reviewer 写 `.adr/<id>/run/<impl>-<slice>-acceptance.md`（文件头注明 `impl=` / `reviewer=`），结论只能是：
+reviewer 写 `.adr/<id>/run/<impl>-<slice>-acceptance.md`（文件头注明 `impl=` / `reviewer=` / `attempt_id=` / `goal_sha256=` / `base_sha=` / reviewed `head_sha=`），结论只能是：
 
 - `全部完成`：主会话把本片置 `done (commit, 数字)`；若还有 pending 切片，把下一片置 `open` 并回到小周期 1。
 - `未完成`：指出缺口；可自动修复时，保持本片 `open`，重新进入小周期 1 编译修复 goal。
 - `BLOCKED`：写清需要的人类决策/凭据/外部条件，把本片置 `paused(原因)` 并通知用户。
 
-reviewer 只写验收报告与（可选）复跑门禁；**不改业务代码、不 commit、不推进 roadmap**。状态推进仍由主会话根据验收结论执行。
+reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代码、不 commit、不推进 roadmap**。review 前后比较 worktree diff；acceptance 允许路径之外出现任何 reviewer 新增 diff，一律判 `BLOCKED`。报告/acceptance 应先写同目录临时文件，完整落盘后再 atomic rename 到哨兵路径，避免 tick 读到半文件。状态推进仍由主会话根据验收结论执行；推进前再次验证当前 HEAD 等于 reviewed `head_sha`。
 
 ## 收尾
 
 最后一片 done 后：
 
-1. 确认每片都有 impl runner 报告与 reviewer 验收报告，且最后一份验收报告结论为 `全部完成`；验收报告头应写明 `impl` / `reviewer`（及 host 若适用）。
+1. 确认每片都有 impl runner 报告与 reviewer 验收报告，且最后一份验收报告结论为 `全部完成`；验收报告头应写明 `impl` / `reviewer` / attempt/hash/SHA 绑定（及 host 若适用）。
 2. 对抗式全量核验（仍优先用与 impl 不同的 reviewer，或主会话在 reviewer 报告上二次核对）：全部切片 commit 齐、门禁最终数字、报告齐、验收报告齐。
 3. 在 `progress.md` 写收官条目（每片 commit/测试数/host/impl/reviewer/成本汇总表）。
 4. 若项目有全局进展文档（如 `docs/STATUS.md`、changelog、kb progress），补一条**简短**收官记录——per-tick 日志留在 `.adr/<id>/progress.md`，不要污染全局文档。
 5. 删哨兵定时任务；host=orca 时可 `worktree set --workspace-status completed` 并更新 comment。
-6. 通知用户 loop 结束 + 待人工验收清单（如有）。**不要**未经用户同意 `worktree rm` 删掉 ADR worktree。
+6. 按 plan 的 control-plane 策略提交或归档 `.adr/`，记录归档位置；通知用户 loop 结束 + 待人工验收清单（如有）。**未确认归档且未经用户明确同意，不得 `worktree rm`**。
 
 ## 常见故障对照表
 
@@ -318,7 +337,7 @@ reviewer 只写验收报告与（可选）复跑门禁；**不改业务代码、
 | runner 退出、无报告、有未提交改动 | API 限流 / session 超时 | 重启 impl（tmux 或 orca terminal），续跑捡起改动 |
 | runner 秒退、日志显示困惑 | next-goal.md 是旧片内容 | goal 写错路径——检查是否写进了主仓；修正后重启 |
 | 自动点火被权限拦截 | 安全分类暂不可用 | 记「待点火」，给用户 `!` 命令；下一 tick 重试 |
-| 日志/终端连续两 tick 无进展 | runner 卡死 | tmux: kill 重启；orca: terminal stop/create 重扇出；多次则拆片 |
+| 日志/终端连续两 tick 无进展 | runner 卡死 | tmux: kill 对应 session；orca: 先核对 handle/title，再 `terminal close --terminal <handle>` 并 create 重扇出；**禁止**默认用 `terminal stop --worktree`；多次则拆片 |
 | 报告含 BLOCKED | 语义歧义 / 门禁不过 / 缺凭据 | 读报告定位：可自决的编修复 goal，需人工的置 paused 通知 |
 | grilling skill 找不到 | 未装 mattpocock/skills | **询问**是否 `npx skills add mattpocock/skills`；拒绝则走现成设计/轻量访谈 |
 | 验收被主会话直接放行 | 未启动跨工具 reviewer | 补写 acceptance-prompt 并按 host 启动 reviewer；同工具须用户书面确认 |
