@@ -43,7 +43,7 @@ TASK: ADR <id> · <切片名>（<一行范围摘要>）
 - 只能实现本切片；不得推进下一片或修改 roadmap 状态。
 - 本地 commit，**绝不 push**
 - runner 退出前必须写报告；若遇到 BLOCKED 条件，报告写明 `BLOCKED`、证据和需要的人类决策。
-- runner 自报完成不等于阶段完成；阶段完成只能由 **与 impl 不同的 reviewer** 在 acceptance 报告中给出 `全部完成`。
+- runner 自报完成不等于阶段完成；阶段完成只能由 **与 impl 不同的 reviewer** 在 acceptance 报告中给出 `全部完成`（host 可为 tmux 或 orca terminal）。
 - runner 不得自行启动验收或修改 acceptance 报告。
 
 ## 统一 DoD
