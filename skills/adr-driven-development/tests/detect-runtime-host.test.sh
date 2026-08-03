@@ -90,6 +90,11 @@ env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \
   "$DETECT" --help >"$OUT" 2>"$ERR"
 assert_status '--help exits 0' 0 $?
 assert_contains '--help documents --prefer' "$OUT" '^  detect-runtime-host\.sh --prefer orca'
+if grep -Eq '^(set -eu|FORMAT=kv)$' "$OUT"; then
+  not_ok '--help only prints usage comments'
+else
+  ok '--help only prints usage comments'
+fi
 
 env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \
   "$DETECT" --force foo >"$OUT" 2>"$ERR"
@@ -139,6 +144,15 @@ env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \
 assert_status 'reachable=false degrades to available tmux' 0 $?
 assert_contains 'reachable=false never selects Orca' "$OUT" '^host=tmux$'
 assert_contains 'reachable=false marks Orca failed' "$OUT" '^orca_status=fail$'
+
+: >"$CALLS"
+env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \
+  TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" \
+  FAKE_ORCA_JSON='{"ok":true,"result":{"runtime":{"reachable":false}},"terminal":{"reachable":true}}' \
+  "$DETECT" >"$OUT" 2>"$ERR"
+assert_status 'runtime unreachable with terminal reachable degrades to tmux' 0 $?
+assert_contains 'non-runtime reachable true never selects Orca' "$OUT" '^host=tmux$'
+assert_contains 'runtime unreachable with terminal reachable marks failure' "$OUT" '^orca_status=fail$'
 
 : >"$CALLS"
 env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \

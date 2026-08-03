@@ -36,7 +36,7 @@ FORCE=""
 
 usage() {
   _usage_status=${1:-2}
-  sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
   exit "$_usage_status"
 }
 
@@ -195,8 +195,14 @@ check_orca_status() {
     ORCA_STATUS=fail
     return 1
   fi
-  # 健康条件至少要求 runtime reachable；任意层 ok:true 都不能替代它。
-  if printf '%s' "$_out" | grep -Eq '"reachable"[[:space:]]*:[[:space:]]*true'; then
+  # 任意 reachable:false 都表示状态不健康，不能被其它对象的 true 覆盖。
+  if printf '%s' "$_out" | grep -Eq '"reachable"[[:space:]]*:[[:space:]]*false'; then
+    ORCA_STATUS=fail
+    return 1
+  fi
+  # 健康条件要求 runtime 对象自身 reachable:true；其它层的 true 不能替代它。
+  _one_line=$(printf '%s' "$_out" | tr '\r\n' '  ')
+  if printf '%s' "$_one_line" | grep -Eq '"runtime"[[:space:]]*:[[:space:]]*\{[^}]*"reachable"[[:space:]]*:[[:space:]]*true'; then
     ORCA_STATUS=ok
     return 0
   fi
