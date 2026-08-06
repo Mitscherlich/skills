@@ -1,17 +1,5 @@
 # @m9ch/skills
 
-可复用的 AI 技能（Skills）集合，为 Claude Code / Codex / Grok 等 coding agent 提供特定领域的专业能力扩展。**不绑定单一厂商。**
-
-## 仓库布局
-
-```
-skills/                 # 技能源目录（唯一真相源）
-.agents/skills -> ../skills   # 多 Agent 通用发现路径
-.claude/skills -> ../skills   # Claude Code 兼容入口
-```
-
-在本仓库内开发时，Agent 通过 `.agents/skills`（或 `.claude/skills`）加载技能；二者均为相对符号链接，指向同一 `skills/`。
-
 ## 安装
 
 通过 [skills cli](https://github.com/vercel-labs/skills) 一键安装全部技能：
