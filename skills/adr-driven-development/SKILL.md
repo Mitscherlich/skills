@@ -1,14 +1,32 @@
 ---
 name: adr-driven-development
 description: Use when the user wants an ADR-driven unattended delivery loop, asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation with detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
-version: 0.4.0
+version: 0.5.0
 ---
 
 # ADR 驱动开发（grill → loop → host runner 无人值守实现）
 
 把一个模糊的大需求变成「已核验的一串本地 commit」的完整流水线。人只在两个点介入：前期 grill 对话（裁决设计），以及 runner 点火被权限拦截时手动执行一条命令。其余全部自动。
 
-**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh` 拿结果，**禁止**靠读文档/环境变量自行推理 host（浪费 token 且易漂）。默认倾向 `tmux`；脚本在 Orca 环境且 CLI 健康时返回 `orca`。用户 `--host=` / `ADR_HOST=` 映射到脚本的严格 `--force`；仅“优先某 host、失败可降级”时使用 `--prefer`。
+**演进路线**：见 `ROADMAP.md`（0.5.x = 可执行 control-plane kernel；方法论仍在本 skill）。
+
+**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh`（或 `scripts/adr detect-host`）拿结果，**禁止**靠读文档/环境变量自行推理 host（浪费 token 且易漂）。默认倾向 `tmux`；脚本在 Orca 环境且 CLI 健康时返回 `orca`。用户 `--host=` / `ADR_HOST=` 映射到脚本的严格 `--force`；仅“优先某 host、失败可降级”时使用 `--prefer`。
+
+## Control-plane kernel（0.5.x · 优先调用）
+
+协调 agent **先**用可执行 CLI 查状态/下一步，再读长规程。统一入口：
+
+```bash
+<path-to-skill>/scripts/adr doctor
+<path-to-skill>/scripts/adr status --plan .adr/<id>/plan.md
+<path-to-skill>/scripts/adr next --plan .adr/<id>/plan.md --run-dir .adr/<id>/run
+<path-to-skill>/scripts/adr attempt new
+<path-to-skill>/scripts/adr lock acquire --run-dir .adr/<id>/run --phase impl
+<path-to-skill>/scripts/adr state can --from reviewing --to done
+<path-to-skill>/scripts/adr review-packet --adr-dir .adr/<id>
+```
+
+完整契约：`references/control-plane.md`。门禁：`for t in <skill>/tests/*.test.sh; do sh "$t" || exit 1; done`。
 
 ## 硬性执行契约
 

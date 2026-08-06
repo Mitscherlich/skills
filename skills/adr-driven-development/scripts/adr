@@ -1,0 +1,52 @@
+#!/usr/bin/env sh
+# adr — unified control-plane CLI entry for adr-driven-development
+set -eu
+
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+usage() {
+  cat <<'EOF'
+adr — ADR control-plane kernel CLI
+
+Usage: adr <command> [args]
+
+Commands:
+  doctor              Health check skill tree and tools
+  detect-host [...]   Run detect-runtime-host.sh
+  attempt <new|archive> ...
+  lock <acquire|release|check> ...
+  state <validate|can|transitions> ...
+  status --plan PATH [--json]
+  next --plan PATH [--run-dir DIR]
+  review-packet --adr-dir PATH
+  run-tests            Run all tests/*.test.sh
+  help
+
+Version: 0.5.0
+EOF
+}
+
+[ $# -ge 1 ] || { usage; exit 2; }
+cmd=$1
+shift
+
+case "$cmd" in
+  doctor) exec sh "$HERE/doctor.sh" "$@" ;;
+  detect-host|detect-runtime-host)
+    exec sh "$HERE/detect-runtime-host.sh" "$@"
+    ;;
+  attempt) exec sh "$HERE/attempt.sh" "$@" ;;
+  lock) exec sh "$HERE/lock.sh" "$@" ;;
+  state|state-machine) exec sh "$HERE/state-machine.sh" "$@" ;;
+  status) exec sh "$HERE/status.sh" "$@" ;;
+  next|next-action) exec sh "$HERE/next-action.sh" "$@" ;;
+  review-packet|review) exec sh "$HERE/review-packet.sh" "$@" ;;
+  run-tests|test) exec sh "$HERE/run-tests.sh" "$@" ;;
+  help|-h|--help) usage; exit 0 ;;
+  version|--version) printf '0.5.0\n'; exit 0 ;;
+  *)
+    printf 'error: unknown command: %s\n' "$cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
