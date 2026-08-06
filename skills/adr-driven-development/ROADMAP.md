@@ -100,8 +100,8 @@ coding agents / host adapters
 
 ## 4. 成功标准（0.5.x 收官）
 
-- [ ] ≥15 个本地 commit 对应独立切片能力  
-- [ ] `scripts/adr` 可 `doctor|status|next|attempt|lock|state|review-packet`  
-- [ ] 新增测试全绿；原有 detect-runtime-host 测试不回归  
-- [ ] SKILL.md / ROADMAP / control-plane 文档对齐 version 0.5.x  
-- [ ] 协调 agent 可用 `adr next` 决定下一步，而无需重读全部协议
+- [x] ≥15 个本地 commit 对应独立切片能力  
+- [x] `scripts/adr` 可 `doctor|status|next|attempt|lock|state|review-packet`  
+- [x] 新增测试全绿；原有 detect-runtime-host 测试不回归  
+- [x] SKILL.md / ROADMAP / control-plane 文档对齐 version 0.5.x  
+- [x] 协调 agent 可用 `adr next` 决定下一步，而无需重读全部协议
