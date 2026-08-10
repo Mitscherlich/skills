@@ -1,7 +1,7 @@
 ---
 name: commit-push
-description: 当用户要求"提交代码"、"commit"、"推送代码"、"push"、"提交并推送"、"提交变更"、"推送到远程"、"帮我提交一下"、"把代码推上去"时，应使用此技能。此技能提供规范化的 git 提交与推送工作流，自动分析变更内容、生成符合规范的提交信息并执行相应操作。
-version: 0.4.1
+description: 当用户要求"提交代码"、"commit"、"推送代码"、"push"、"提交并推送"、"提交变更"、"推送到远程"、"帮我提交一下"、"把代码推上去"时，应使用此技能。此技能提供规范化的 git 提交与推送工作流，自动分析变更内容、生成符合规范的提交信息并执行相应操作。默认不附加 Co-authored-by；仅当用户显式传入 --enable-co-authored-by 时才写入签名。
+version: 0.4.2
 ---
 
 # Git 提交与推送工作流
@@ -19,6 +19,17 @@ version: 0.4.1
 | 仅提交 | "提交代码"、"commit" | 执行第二至五步 |
 | 仅推送 | "推送代码"、"push"、"推上去" | 仅执行第六步 |
 | 提交并推送 | "提交并推送"、"commit and push" | 执行全部步骤 |
+
+同时识别可选开关：
+
+| 开关 | 含义 | 默认 |
+|------|------|------|
+| `--enable-co-authored-by` | 在提交信息末尾附加 `Co-authored-by` 签名 | **关闭**（不附加） |
+
+**规则：**
+- **默认不写入** `Co-authored-by` 及与之配套的 `---` 分隔线
+- **仅当**用户在请求中显式写出 `--enable-co-authored-by`（或等价明确要求如「加上 Co-authored-by」「启用 AI 签名」）时，才在提交信息中附加签名
+- 模糊表述（如「帮我提交」）**不得**自行开启签名
 
 支持组合执行——根据用户实际需求灵活选择执行哪些步骤。
 
@@ -69,7 +80,15 @@ version: 0.4.1
 
 ### 第五步：生成提交信息并执行提交
 
-#### 提交信息格式
+#### 提交信息格式（默认，无 Co-authored-by）
+
+```
+<type>[(scope)]: <message>
+
+<body>
+```
+
+#### 提交信息格式（仅 `--enable-co-authored-by` 时）
 
 ```
 <type>[(scope)]: <message>
@@ -91,9 +110,9 @@ Co-authored-by: <model_name> <email>
   - 示例：`(auth)`、`(ui)`、`(api)`、`(config)`
 - **message**：一句话总结变更内容，不超过 15 个字
 - **body**：详细描述本次变更的内容，基于第三步的分析结果，列出关键变更点。每个要点独占一行，使用 `- ` 前缀
-- **Co-authored-by**：标注 AI 协作者信息，以 `---` 分隔线与主体隔开。根据当前 agent 自动填充签名（见下方签名映射表）
+- **Co-authored-by**（可选）：**默认不添加**。仅当用户显式传入 `--enable-co-authored-by` 时，才以 `---` 分隔线与主体隔开，并按下方签名映射表填充
 
-#### Co-authored-by 签名映射
+#### Co-authored-by 签名映射（仅 `--enable-co-authored-by` 时使用）
 
 根据当前运行的 AI agent 自动选择对应的签名：
 
@@ -101,14 +120,42 @@ Co-authored-by: <model_name> <email>
 |-------|------|
 | Claude | `Co-authored-by: claude-4.5-sonnet <noreply@anthropic.com>` |
 | Gemini | `Co-authored-by: gemini-3-pro <noreply@google.com>` |
+| Grok | `Co-authored-by: grok-4.5 <noreply@x.ai>` |
 
 **填充规则：**
 - 签名格式：`Co-authored-by: <model_name> <email>`
-- `model_name`：当前 agent 使用的模型名称（如 `claude-4.5-sonnet`、`gemini-3-pro`）
+- `model_name`：当前 agent 使用的模型名称（如 `claude-4.5-sonnet`、`gemini-3-pro`、`grok-4.5`）
 - `email`：对应厂商的 noreply 邮箱
 - 如果无法识别当前 agent，默认使用 `ai-assistant <noreply@example.com>`
+- **未启用开关时，跳过本段，不要在 commit message 中出现 `Co-authored-by` 或尾部 `---`**
 
 #### 提交信息示例
+
+默认（无签名）：
+
+```
+feat(auth): 新增用户登录功能
+
+- 新增 LoginForm 组件，支持用户名/密码登录
+- 新增 auth 模块，封装登录/登出/Token 刷新逻辑
+- 新增登录页路由配置
+```
+
+```
+fix(list): 修复分页数据加载异常
+
+- 修复分页参数未正确传递导致的数据重复加载问题
+- 修正页码从 0 开始的偏移错误
+```
+
+```
+docs: 更新 API 接口文档
+
+- 补充用户模块接口的请求/响应示例
+- 更新认证相关接口的参数说明
+```
+
+启用 `--enable-co-authored-by` 时，在 body 后追加：
 
 ```
 feat(auth): 新增用户登录功能
@@ -122,32 +169,24 @@ feat(auth): 新增用户登录功能
 Co-authored-by: <model_name> <email>
 ```
 
-```
-fix(list): 修复分页数据加载异常
-
-- 修复分页参数未正确传递导致的数据重复加载问题
-- 修正页码从 0 开始的偏移错误
-
----
-
-Co-authored-by: <model_name> <email>
-```
-
-```
-docs: 更新 API 接口文档
-
-- 补充用户模块接口的请求/响应示例
-- 更新认证相关接口的参数说明
-
----
-
-Co-authored-by: <model_name> <email>
-```
-
 #### 执行提交
 
 1. 使用 `git add` 将相关文件添加到暂存区（优先添加具体文件，避免使用 `git add .`）
 2. 将提交信息写入临时文件，再通过 `--file` 标志传递给 `git commit`，避免 shell 注入风险：
+
+   **默认（无 Co-authored-by）：**
+   ```bash
+   COMMIT_MSG_FILE=$(mktemp /tmp/commit_msg_XXXXXX)
+   cat > "$COMMIT_MSG_FILE" << 'COMMIT_MSG_EOF'
+   <type>[(scope)]: <message>
+
+   <body>
+   COMMIT_MSG_EOF
+   git commit --file="$COMMIT_MSG_FILE"
+   rm -f "$COMMIT_MSG_FILE"
+   ```
+
+   **仅 `--enable-co-authored-by` 时：**
    ```bash
    COMMIT_MSG_FILE=$(mktemp /tmp/commit_msg_XXXXXX)
    cat > "$COMMIT_MSG_FILE" << 'COMMIT_MSG_EOF'
@@ -184,3 +223,4 @@ Co-authored-by: <model_name> <email>
 - 推送失败时，分析错误原因并给出解决建议
 - 若遇到网络错误，最多重试 4 次，采用指数退避策略（2s、4s、8s、16s）
 - 整个流程中使用中文与用户交互
+- **Co-authored-by 默认关闭**；只有用户显式使用 `--enable-co-authored-by`（或明确要求启用 AI 签名）时才写入

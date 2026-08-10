@@ -21,7 +21,7 @@ npx skills add Mitscherlich/skills --skill <skill-name>
 | 技能 | 版本 | 说明 |
 |------|------|------|
 | [adr-driven-development](./skills/adr-driven-development) | 0.5.0 | ADR 驱动无人值守交付：grill → plan → goal → detect-runtime-host → tmux\|orca impl → 跨工具 reviewer |
-| [commit-push](./skills/commit-push) | 0.4.1 | 规范化的 git 提交与推送工作流，自动分析变更并生成 Conventional Commits 提交信息 |
+| [commit-push](./skills/commit-push) | 0.4.2 | 规范化的 git 提交与推送工作流，自动分析变更并生成 Conventional Commits 提交信息；默认不写 Co-authored-by，需 `--enable-co-authored-by` |
 | [iterm2](./skills/iterm2) | 0.1.0 | 通过 iTerm2 Python API 编程控制 iTerm2 终端，支持窗口/标签/面板管理、输入广播、配色字体等 |
 | [xmind](./skills/xmind) | 0.2.0 | XMind 思维导图的解析、创建和更新，支持 XMind 8 与 Zen/2020+ 格式互转 |
 
