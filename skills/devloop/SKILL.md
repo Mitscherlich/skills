@@ -1,6 +1,6 @@
 ---
-name: adr-driven-development
-description: Use when the user wants an ADR-driven unattended delivery loop, asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation with detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
+name: devloop
+description: Use when the user wants an ADR-driven unattended delivery loop (devloop), asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation with detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
 version: 0.5.0
 ---
 

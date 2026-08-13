@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# doctor.sh — health check for adr-driven-development skill layout and scripts
+# doctor.sh — health check for devloop skill layout and scripts
 set -eu
 
 SCRIPT=$0

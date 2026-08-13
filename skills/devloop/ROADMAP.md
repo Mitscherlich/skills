@@ -1,4 +1,4 @@
-# adr-driven-development · ROADMAP
+# devloop · ROADMAP
 
 > 版本线：0.4.0 → 0.5.x（control-plane kernel）→ 0.6.x（跨会话 watch / adapter）  
 > 来源：相对 Claude Dynamic Workflows / acpus / LoopX 的差距分析（2026-08-06）  

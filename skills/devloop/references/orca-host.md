@@ -1,6 +1,6 @@
 # Orca host 执行手册（host=orca）
 
-本文件是 `adr-driven-development` 在 **host 已定为 orca** 后的执行细节。契约（切片状态、DoD、跨工具验收、禁止内联实现）与主 SKILL 相同；此处只规定 **如何用 orca-cli 代替 tmux / 裸 git worktree**。
+本文件是 `devloop` 在 **host 已定为 orca** 后的执行细节。契约（切片状态、DoD、跨工具验收、禁止内联实现）与主 SKILL 相同；此处只规定 **如何用 orca-cli 代替 tmux / 裸 git worktree**。
 
 ## 先决：host 由脚本决定，不在此文件里重探
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# adr — unified control-plane CLI entry for adr-driven-development
+# adr — unified control-plane CLI entry for devloop
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
