@@ -164,6 +164,12 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 
 ## 哨兵（host=orca）
 
+只在 `detect-loop-scheduler.sh` 给出 `scheduler=loop|orca-automation|cron` 之后建哨兵。
+
+- `scheduler=loop`：协调者自己的 `/loop`。
+- `scheduler=orca-automation`（典型：协调者是 omp）：**自动** `ORCA automations create --workspace active --reuse-session`，并告知用户「当前协调者不支持 `/loop`，已改用 Orca automation」。不要再问 cron / 换人，也不要另建 crontab。
+- `scheduler=ask`：不在 Orca 且无 `/loop` 才问用户。
+
 每 10 分钟先用原子 `mkdir .adr/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 锁；未抢到立即退出，锁拥有者完成后释放，避免两个 tick 重复扇出。然后：
 
 1. `ORCA terminal list --worktree id:<...> --json` — impl/review handle 是否仍在
@@ -171,8 +177,29 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 3. worktree 内 `git log --oneline -3`、当前 attempt 的 report/acceptance 绑定与 mtime、roadmap open 片
 4. 停滞：handle 仍在但输出/文件无进展 → 疑似停滞×N；连续 2 次通知用户
 5. impl 报告绑定齐且仍 open → 启动 reviewer；acceptance 绑定齐且 HEAD 等于 reviewed head → 主会话核验结论
+6. **清理已完成 session**（见下一节）
 
-默认定时机制多为会话级，协调者退出即 loop 停止。长 loop 应使用 Orca automations（或明确的持久调度器），并沿用同一 attempt/锁协议。
+## 已完成 session 清理（每个 tick 必做）
+
+Orca 里每个 impl / reviewer / compiler 都是独立 terminal/session。完成后若不关，PTY 和 agent 进程会一直占内存。
+
+在 impl 报告已被本轮消费、reviewer 验收已被推进、以及每个哨兵 tick 结束时：
+
+```text
+ORCA worktree ps --json
+<skill>/scripts/adr cleanup-sessions \
+  --orca-cli <orca_cli> \
+  --worktree id:<repoId>::<adrWorktreePath> \
+  --keep <ORCA_TERMINAL_HANDLE>,<current_impl_handle>,<current_review_handle> \
+  --title-prefix adr-<id>- \
+  --also-close <progress 中已结束的旧 handle>
+```
+
+- `--keep`：协调者自己 + 当前仍 live 的 impl + 当前仍 live 的 reviewer。空 handle 不要写进去。
+- 脚本会关：`worktree ps` 里本 worktree `state=done` 的 agent、title 含 `adr-<id>-` 的遗留 tab、以及 `--also-close`。
+- 不要关用户接管（`user_takeover` / 不在候选里）的 terminal。
+- **禁止** `terminal stop --worktree`；**禁止**未确认就 `worktree rm`。
+- 把 `closed=` 写入 progress。`tab_not_found` / stale handle 只记一笔。
 
 ## 与 orchestration skill 的边界
 
@@ -189,6 +216,7 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "ADR <id> F2 acceptan
 | `terminal create --command` 不识别 agent | 查本机已装 agent；换配对或请用户安装 |
 | 单 terminal 卡死 / handle stale | 核对 worktree+title+attempt 后 `terminal close --terminal <handle>`，重建并生成新 attempt；禁止默认 `terminal stop --worktree` |
 | 用户 `--host=tmux` | 全程走 launch-runner.sh + tmux，忽略 Orca 扇出 |
+| 协调者无 `/loop` 且 `orca_env=1` | 自动 Orca automation 并告知用户；禁止再问、禁止另建 crontab |
 
 ## 最小命令清单（备忘）
 
@@ -204,6 +232,7 @@ ORCA terminal send --terminal <handle> --text "..." --enter --json
 ORCA terminal list --worktree id:<repoId>::<path> --json
 ORCA terminal read --terminal <handle> --json
 ORCA terminal close --terminal <handle> --json
+<skill>/scripts/adr cleanup-sessions --orca-cli ORCA --worktree id:<repoId>::<path> --keep <live> --title-prefix adr-<id>-
 ```
 
 命令 flag 以 `ORCA skills get orca-cli` 为准；若与上文冲突，**以二进制指南为准**并更新本文件。

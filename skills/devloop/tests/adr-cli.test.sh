@@ -16,10 +16,22 @@ not_ok() { FAIL=$((FAIL + 1)); printf 'not ok %s - %s\n' "$((PASS + FAIL))" "$1"
 if sh -n "$ADR"; then ok 'sh -n adr'; else not_ok 'sh -n adr'; fi
 
 ver=$(sh "$ADR" version)
-[ "$ver" = "0.5.0" ] && ok 'version 0.5.0' || not_ok 'version 0.5.0'
+[ "$ver" = "0.5.1" ] && ok 'version 0.5.1' || not_ok 'version 0.5.1'
 
 if sh "$ADR" help >/dev/null; then ok 'help exits 0'; else not_ok 'help exits 0'; fi
 
+
+if sh "$ADR" detect-scheduler --coordinator grok >/dev/null; then
+  ok 'detect-scheduler via adr'
+else
+  not_ok 'detect-scheduler via adr'
+fi
+
+if sh "$ADR" cleanup-sessions --help >/dev/null 2>&1; then
+  not_ok 'cleanup-sessions help exits 2'
+else
+  ok 'cleanup-sessions help exits 2'
+fi
 if sh "$ADR" doctor >/dev/null; then ok 'doctor via adr'; else not_ok 'doctor via adr'; fi
 
 id=$(sh "$ADR" attempt new --prefix cli)

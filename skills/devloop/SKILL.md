@@ -1,7 +1,7 @@
 ---
 name: devloop
 description: Use when the user wants an ADR-driven unattended delivery loop (devloop), asks to slice a large requirement into verified local commits, continue an existing .adr/<id>/plan.md loop, or run implementation with detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
-version: 0.5.0
+version: 0.5.1
 ---
 
 # ADR 驱动开发（grill → loop → host runner 无人值守实现）
@@ -10,7 +10,7 @@ version: 0.5.0
 
 **演进路线**：见 `ROADMAP.md`（0.5.x = 可执行 control-plane kernel；方法论仍在本 skill）。
 
-**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh`（或 `scripts/adr detect-host`）拿结果，**禁止**靠读文档/环境变量自行推理 host（浪费 token 且易漂）。默认倾向 `tmux`；脚本在 Orca 环境且 CLI 健康时返回 `orca`。用户 `--host=` / `ADR_HOST=` 映射到脚本的严格 `--force`；仅“优先某 host、失败可降级”时使用 `--prefer`。
+**执行宿主（host）**：进入 loop 时**必须**跑 `scripts/detect-runtime-host.sh`（或 `scripts/adr detect-host`）拿结果，**禁止**靠读文档/环境变量自行推理 host。哨兵调度另跑 `scripts/detect-loop-scheduler.sh`：协调者支持 `/loop` 就用 `/loop`；不支持且在 Orca 里**自动**用 Orca automation 并告知用户；其余场景再问用户。
 
 ## Control-plane kernel（0.5.x · 优先调用）
 
@@ -24,6 +24,8 @@ version: 0.5.0
 <path-to-skill>/scripts/adr lock acquire --run-dir .adr/<id>/run --phase impl
 <path-to-skill>/scripts/adr state can --from reviewing --to done
 <path-to-skill>/scripts/adr review-packet --adr-dir .adr/<id>
+<path-to-skill>/scripts/adr detect-scheduler
+<path-to-skill>/scripts/adr cleanup-sessions --orca-cli orca --worktree id:<repoId>::<path> --keep <live_handles>
 ```
 
 完整契约：`references/control-plane.md`。门禁：`for t in <skill>/tests/*.test.sh; do sh "$t" || exit 1; done`。
@@ -33,7 +35,7 @@ version: 0.5.0
 本 skill 的顺序不可重排：
 
 1. **grill 门禁**：先深挖意图、裁决方案和实现深度，写出 plan.md，并取得用户对 plan 的明确确认。
-2. **loop 小周期**：只在 plan 已确认后，按「host 解析 → goal 编译 → impl runner → 跨工具验收 reviewer」串行推进切片。
+2. **loop 小周期**：只在 plan 已确认后，按「host 解析 → 哨兵调度裁决 → goal 编译 → impl runner → 跨工具验收 reviewer」串行推进切片。
 3. **最终汇总**：只有验收 reviewer 汇报全部完成后，才能进入最终汇总汇报。
 
 禁止项：
@@ -175,6 +177,40 @@ grill 可以先在当前 checkout 写 `.adr/<id>/`，但进入执行 worktree �
 将 `host`、`orca_cli`（若有）、`reason`、impl/reviewer 原样写入 plan 确认记录与 progress 启动行。
 `host=orca` 时的 worktree/terminal 扇出步骤仍见 `references/orca-host.md`（**只在 host 已定为 orca 后**再读，避免无谓烧 token）。
 
+### 0.5 解析哨兵调度（进入 loop 时必做）
+
+host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调者（主会话 harness）和 impl/reviewer 不是一回事：Orca 里用 omp 当协调者很常见，omp **没有** `/loop`。
+
+```bash
+<path-to-skill>/scripts/detect-loop-scheduler.sh
+<path-to-skill>/scripts/adr detect-scheduler
+<path-to-skill>/scripts/detect-loop-scheduler.sh --json
+```
+
+| 字段 | 含义 |
+|---|---|
+| `coordinator` | `claude-code` / `codex` / `grok` / `omp` / `pi` / `unknown` |
+| `loop_supported` | `1` 才能用 `/loop`；仅 `claude-code` / `codex` / `grok` |
+| `orca_env` | `1` = 当前在 Orca |
+| `scheduler` | `loop` / `orca-automation` / `cron` / `ask` — **直接采用，勿再推理** |
+| `reason` | 写入 progress.md |
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 调度已决定（`loop` / `orca-automation` / `cron`） |
+| 1 | `scheduler=ask`：必须停下来问用户 |
+| 2 | 参数错误 |
+
+按 `scheduler=` 执行（禁止自己改判）：
+
+- **`loop`**：当前协调者支持 `/loop`，直接建每 10 分钟的 `/loop`（避开整点分钟）。
+- **`orca-automation`**：协调者没有 `/loop`，但人在 Orca。**自动**用 Orca automations 当哨兵，并**告知用户**：当前协调者是 `<coordinator>`，不支持 `/loop`，已改用 Orca automation，不必换 agent。不要再问「cron 还是换人」，也不要另建 crontab。
+  - `ORCA automations create --name adr-<id>-sentinel --trigger "<避开整点的 10 分钟 cron>" --workspace active --reuse-session --prompt "<tick prompt>" --json`
+  - `--reuse-session` 打回当前协调者会话；`--provider` 以 `ORCA automations create --help` 为准，不要另开第二个协调者。
+  - 把 automation id 写入 progress / plan 确认记录。
+- **`ask`**：不支持 `/loop`，也不在 Orca。告诉用户当前协调者不支持 `/loop`，请选：本机 cronjob / launchd，或换 claude-code / codex / grok 再进 loop。未选之前 progress 记 `paused(待选哨兵调度)`，不创建 cron、不点火。
+- 用户已书面选定后才用 `--force loop|cron|orca-automation`。`--force loop` 在 `loop_supported=0` 时仍会 `ask`。
+
 ### 隔离执行区
 
 - **host=tmux**：`git worktree add`，分支 `feat/adr<id>-<slug>`。
@@ -186,19 +222,42 @@ Orca 详细命令与扇出步骤见 `references/orca-host.md`；操作前应 `OR
 
 ### 哨兵（定时巡检）
 
-创建一个**每 10 分钟触发的定时任务**（用当前环境可用的定时机制；选一个避开整点的分钟数，减少与他人任务撞点）。多数定时器是会话级：协调者退出即 loop 停止；需要跨会话长跑时使用 Orca automations 或明确的持久调度器。每个 tick 先用原子的 `mkdir .adr/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 阶段锁；未抢到就退出，锁拥有者结束时释放，避免重复扇出 reviewer/重复推进。
+只在 `detect-loop-scheduler.sh` 给出 `scheduler=loop|orca-automation|cron` 之后创建哨兵。间隔 10 分钟，选一个避开整点的分钟数。多数定时器是会话级：协调者退出即 loop 停止。每个 tick 先用原子的 `mkdir .adr/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 阶段锁；未抢到就退出，锁拥有者结束时释放，避免重复扇出 reviewer/重复推进。
 
 定时任务的 prompt 要求每次：
 
 1. 一次命令汇总：
    - **tmux**：session 存活性、日志行数、`tail -c 2000`、`git log --oneline -3`、open 切片
-   - **orca**：`terminal list` / `terminal read`、报告文件是否出现、`git log --oneline -3`（在 ADR worktree path）、open 切片
+   - **orca**：`terminal list` / `terminal read`、报告文件是否出现、`git log --oneline -3`（在 ADR worktree path）、open 切片；并立刻做下面第 6 步的 session 清理
 2. 停滞判定：runner/agent 仍在但日志或文件无进展 → 记「疑似停滞×N」，连续 2 次**主动通知用户**。
-3. 往 `progress.md` 巡检表**追加一行**（时间/切片/host/runner 状态/提交数/要点）。
+3. 往 `progress.md` 巡检表**追加一行**（时间/切片/host/scheduler/runner 状态/提交数/要点）。
 4. impl 完成（当前 attempt 的报告齐且该片仍 open）→ 进入小周期 3 跨工具 reviewer。
 5. loop 收官后删除该定时任务。
+6. **host=orca 时每个 tick 必须清理已完成 session**（见下）。Orca 子任务会留下独立 terminal/session，不关就会一直占内存。
 
 完成哨兵不得只检查固定路径文件存在。当前产物必须满足：`attempt_id` 与本轮一致；`goal_sha256` 与当前 goal 一致；报告/验收的 mtime 晚于本轮 goal 与归档动作；报告的 `base_sha`、`head_sha` 可验证。re-open 切片前必须把上一轮 report/acceptance 移入 `run/archive/<attempt_id>/`，或改用含 attempt 的新产物路径。
+
+#### host=orca：清理已完成 session
+
+每个 tick、以及 impl / reviewer / compiler 的产物已被本轮消费之后，跑：
+
+```bash
+<path-to-skill>/scripts/adr cleanup-sessions \
+  --orca-cli <detect-host 给出的 orca_cli> \
+  --worktree id:<repoId>::<path> \
+  --keep <coordinator_handle>,<current_impl_handle>,<current_review_handle> \
+  --title-prefix adr-<id>- \
+  --also-close <progress 里已结束的旧 handle>
+```
+
+规则：
+
+- `--keep` 只留协调者自己、当前仍 live 的 impl、当前仍 live 的 reviewer。
+- 脚本会关：`worktree ps` 里 `state=done` 的 agent terminal、title 含 `adr-<id>-` 的遗留 tab、以及 `--also-close`。
+- **禁止** `terminal stop --worktree`（会停掉整个 worktree）。
+- **禁止** 未获用户确认就 `worktree rm`。
+- 关完把 `closed=` 写入 progress；handle 失效只记一笔，不重试双关。
+
 
 ### 小周期 1：goal 编译
 
@@ -345,7 +404,7 @@ reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代
 2. 对抗式全量核验（仍优先用与 impl 不同的 reviewer，或主会话在 reviewer 报告上二次核对）：全部切片 commit 齐、门禁最终数字、报告齐、验收报告齐。
 3. 在 `progress.md` 写收官条目（每片 commit/测试数/host/impl/reviewer/成本汇总表）。
 4. 若项目有全局进展文档（如 `docs/STATUS.md`、changelog、kb progress），补一条**简短**收官记录——per-tick 日志留在 `.adr/<id>/progress.md`，不要污染全局文档。
-5. 删哨兵定时任务；host=orca 时可 `worktree set --workspace-status completed` 并更新 comment。
+5. 删哨兵定时任务；host=orca 时先再跑一遍 `cleanup-sessions`（`--keep` 只留协调者），再 `worktree set --workspace-status completed` 并更新 comment。
 6. 按 plan 的 control-plane 策略提交或归档 `.adr/`，记录归档位置；通知用户 loop 结束 + 待人工验收清单（如有）。**未确认归档且未经用户明确同意，不得 `worktree rm`**。
 
 ## 常见故障对照表
@@ -364,6 +423,9 @@ reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代
 | reviewer 看不到 impl commit | 误开了第二个 worktree | 强制同一 `worktree.id`；废掉平行树后重跑验收 |
 | `terminal_handle_stale` | Orca 重启或 handle 过期 | `terminal list` 取新 handle，只对新 handle send |
 | agent 自行猜 host 与脚本不一致 | 未跑 detect 脚本 | **以脚本 stdout 为准**；重跑并覆盖 plan/progress |
+| 协调者是 omp 且不在 Orca，却去建 cron / 假装 `/loop` | 未跑 `detect-loop-scheduler` 或把 ask 当成 cron | **停下来问用户**：换 claude-code / codex / grok，或明确授权 cronjob；未选不得点火 |
+| 协调者无 `/loop` 且在 Orca，却去问用户或建 crontab | 应自动走 Orca automation | 按脚本 `scheduler=orca-automation` 建 automation 并告知用户，不要再问 |
+| Orca 内存持续涨、terminal 越积越多 | 已完成 impl/review session 未关 | 每个 tick 跑 `adr cleanup-sessions`；只 keep 当前 live handle；禁止 `terminal stop --worktree` |
 
 ## 参考
 
@@ -371,4 +433,6 @@ reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代
 - `references/goal-template.md` — next-goal.md 结构模板（本 skill 的权威契约；可选经 qiaomu 填「工具 goal 指令」段）
 - `references/orca-host.md` — host=orca 时 orca-cli worktree / impl·reviewer 扇出手册（**host 已定为 orca 后再读**）
 - `scripts/detect-runtime-host.sh` — **host 探测唯一入口**（进入 loop 必跑）
+- `scripts/detect-loop-scheduler.sh` — **哨兵调度探测唯一入口**（`/loop` → Orca automation → 再问）
+- `scripts/cleanup-orca-sessions.sh` — host=orca 时清理已完成 terminal/session
 - `scripts/launch-runner-template.sh` — host=tmux 时 impl runner 启动器模板

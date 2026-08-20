@@ -13,6 +13,8 @@ Usage: adr <command> [args]
 Commands:
   doctor              Health check skill tree and tools
   detect-host [...]   Run detect-runtime-host.sh
+  detect-scheduler [...]
+  cleanup-sessions --orca-cli PATH --worktree ID [opts]
   attempt <new|archive> ...
   lock <acquire|release|check> ...
   state <validate|can|transitions> ...
@@ -22,7 +24,7 @@ Commands:
   run-tests            Run all tests/*.test.sh
   help
 
-Version: 0.5.0
+Version: 0.5.1
 EOF
 }
 
@@ -35,6 +37,12 @@ case "$cmd" in
   detect-host|detect-runtime-host)
     exec sh "$HERE/detect-runtime-host.sh" "$@"
     ;;
+  detect-scheduler|detect-loop-scheduler)
+    exec sh "$HERE/detect-loop-scheduler.sh" "$@"
+    ;;
+  cleanup-sessions|cleanup-orca-sessions)
+    exec sh "$HERE/cleanup-orca-sessions.sh" "$@"
+    ;;
   attempt) exec sh "$HERE/attempt.sh" "$@" ;;
   lock) exec sh "$HERE/lock.sh" "$@" ;;
   state|state-machine) exec sh "$HERE/state-machine.sh" "$@" ;;
@@ -43,7 +51,7 @@ case "$cmd" in
   review-packet|review) exec sh "$HERE/review-packet.sh" "$@" ;;
   run-tests|test) exec sh "$HERE/run-tests.sh" "$@" ;;
   help|-h|--help) usage; exit 0 ;;
-  version|--version) printf '0.5.0\n'; exit 0 ;;
+  version|--version) printf '0.5.1\n'; exit 0 ;;
   *)
     printf 'error: unknown command: %s\n' "$cmd" >&2
     usage >&2

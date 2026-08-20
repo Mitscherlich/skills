@@ -29,6 +29,8 @@ grill 阶段边聊边填「决策」小节；grill 收尾时补「切片 roadmap
 - 确认范围：<本 plan 覆盖哪些切片，哪些暂停>
 - 执行宿主（`--host`）：`<tmux|orca|自动>` — **以 `scripts/detect-runtime-host.sh` 输出的 host= 为准**
   - 自动探测勿手推；用户 `--host=` / `ADR_HOST=` 使用严格 `--force`，仅偏好且允许降级时用 `--prefer`
+- 哨兵调度：`</loop|orca-automation|cronjob|待选>` — **以 `scripts/detect-loop-scheduler.sh` 为准**；有 `/loop` 用 `/loop`；无 `/loop` 且在 Orca 则自动 automation 并告知；其余才问用户
+- 协调者：`<claude-code|codex|grok|omp|…>`
 - Orca setup policy：`setup=<run|skip|inherit>`（host=tmux 时填不适用）
 - 权限与 threat model：<默认最小权限；若使用 bypassPermissions / danger sandbox，粘贴用户授权及必要性>
 - 实现 runner（`--impl`）：`<claude-code|codex|grok>`（Orca agent：`claude`/`codex`/`grok`）
@@ -63,12 +65,13 @@ grill 阶段边聊边填「决策」小节；grill 收尾时补「切片 roadmap
 1. 检查确认记录存在且当前只有一个 `open` 片；否则回到 grill 或暂停。确认记录须含 host / impl / reviewer（或「自动探测」「按默认配对」）。
 2. 执行 `.adr` lifecycle 交接：从 `source_worktree` 用 `cp -a` / `rsync` 迁入执行区并核对 `plan_sha256`；依赖 dirty 业务改动时暂停，让用户选择先 commit / patch 导入 / 改用当前 checkout。执行区设置 `git config remote.origin.pushurl no_push` 或等价硬禁 push。
 3. 解析 host：**执行** `scripts/detect-runtime-host.sh`（用户指定则加严格 `--force`，偏好才加 `--prefer`），采用 stdout 的 `host=` / `orca_cli=`；勿手推。`--force tmux` 不得调用 Orca。host=orca 时再读 `references/orca-host.md` 做 worktree/terminal 扇出。
-4. re-open 切片或重新点火前，先把旧 report/acceptance 归档到 `run/archive/<旧 attempt_id>/`（或改用含 attempt 的新路径）；生成新 `attempt_id`，再按 `references/goal-template.md` 写 next-goal。编译子代理只写 goal，不改代码。
-5. 按 host 点火 **impl**（tmux：`sh launch-runner.sh`，session `adr-<id>-<slice>`；orca：同 worktree、title `adr-<id>-<slice>-impl-<attempt>`）。每个 tick 用 `mkdir .adr/<id>/run/.lock-<phase>` 原子抢占；哨兵按 attempt/hash/mtime/HEAD 核验，不得只看固定路径存在。主会话不得内联实现业务代码。
-6. impl 完成后冻结 impl，记录待验 HEAD，写 acceptance-prompt；启动 **与 impl 不同的 reviewer**（同一 worktree）。任何同工具验收都必须先有用户明确授权；只剩一个工具只触发询问。reviewer 只写 acceptance/只读复跑测试，acceptance 外新增 diff 即 `BLOCKED`。
-7. acceptance 的 attempt/hash/mtime 合法且当前 HEAD 等于 reviewed `head_sha`，结论为 `全部完成` → 本片置 `done (commit, 数字)`；有 pending 片则下一片置 `open`。
-8. 结论为 `未完成` → 保持 `open`，归档本轮产物后编译修复 goal；`BLOCKED` → 置 `paused(原因)` 并通知用户。
-9. 所有切片均 `done` → 最终汇总、删定时器、按 control-plane 策略提交/归档 `.adr/`；确认归档且得到用户清理授权后才允许 `worktree rm`。
+4. 解析哨兵调度：**执行** `scripts/detect-loop-scheduler.sh`。`loop` 用 `/loop`；`orca-automation` 自动建 Orca automation 并告知用户；`ask` 才停下来让用户选 cronjob 或换协调者。未选不得点火。
+5. re-open 切片或重新点火前，先把旧 report/acceptance 归档到 `run/archive/<旧 attempt_id>/`（或改用含 attempt 的新路径）；生成新 `attempt_id`，再按 `references/goal-template.md` 写 next-goal。编译子代理只写 goal，不改代码。
+6. 按 host 点火 **impl**（tmux：`sh launch-runner.sh`，session `adr-<id>-<slice>`；orca：同 worktree、title `adr-<id>-<slice>-impl-<attempt>`）。每个 tick 用 `mkdir .adr/<id>/run/.lock-<phase>` 原子抢占；哨兵按 attempt/hash/mtime/HEAD 核验，不得只看固定路径存在。host=orca 时每个 tick 跑 `cleanup-orca-sessions.sh`，关掉已完成 session。主会话不得内联实现业务代码。
+7. impl 完成后冻结 impl，记录待验 HEAD，写 acceptance-prompt；启动 **与 impl 不同的 reviewer**（同一 worktree）。任何同工具验收都必须先有用户明确授权；只剩一个工具只触发询问。reviewer 只写 acceptance/只读复跑测试，acceptance 外新增 diff 即 `BLOCKED`。
+8. acceptance 的 attempt/hash/mtime 合法且当前 HEAD 等于 reviewed `head_sha`，结论为 `全部完成` → 本片置 `done (commit, 数字)`；有 pending 片则下一片置 `open`。
+9. 结论为 `未完成` → 保持 `open`，归档本轮产物后编译修复 goal；`BLOCKED` → 置 `paused(原因)` 并通知用户。
+10. 所有切片均 `done` → 最终汇总、删定时器、host=orca 再清一次已完成 session、按 control-plane 策略提交/归档 `.adr/`；确认归档且得到用户清理授权后才允许 `worktree rm`。
 ```
 
 ## lifecycle 交接自检
