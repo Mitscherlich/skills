@@ -15,8 +15,8 @@
 #   detect-loop-scheduler.sh --force loop         # 用户已选 /loop（仅当协调者支持）
 #   detect-loop-scheduler.sh --force orca-automation
 #   detect-loop-scheduler.sh --json
-#   ADR_SCHEDULER=cron detect-loop-scheduler.sh
-#   ADR_COORDINATOR=omp detect-loop-scheduler.sh
+#   DEVLOOP_SCHEDULER=cron detect-loop-scheduler.sh
+#   DEVLOOP_COORDINATOR=omp detect-loop-scheduler.sh
 #
 # 退出码:
 #   0  调度已决定（scheduler=loop|orca-automation|cron）
@@ -69,18 +69,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -z "$FORCE" ] && [ -n "${ADR_SCHEDULER:-}" ]; then
-  case "$ADR_SCHEDULER" in
-    loop|cron|orca-automation) FORCE=$ADR_SCHEDULER ;;
+if [ -z "$FORCE" ] && [ -n "${DEVLOOP_SCHEDULER:-}" ]; then
+  case "$DEVLOOP_SCHEDULER" in
+    loop|cron|orca-automation) FORCE=$DEVLOOP_SCHEDULER ;;
     *)
-      echo "error: ADR_SCHEDULER must be loop|cron|orca-automation" >&2
+      echo "error: DEVLOOP_SCHEDULER must be loop|cron|orca-automation" >&2
       exit 2
       ;;
   esac
 fi
 
-if [ -z "$COORD_OVERRIDE" ] && [ -n "${ADR_COORDINATOR:-}" ]; then
-  COORD_OVERRIDE=$ADR_COORDINATOR
+if [ -z "$COORD_OVERRIDE" ] && [ -n "${DEVLOOP_COORDINATOR:-}" ]; then
+  COORD_OVERRIDE=$DEVLOOP_COORDINATOR
 fi
 
 # ── 探测协调者 ──────────────────────────────────────────────

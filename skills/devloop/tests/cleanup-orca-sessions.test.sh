@@ -37,7 +37,7 @@ assert_contains() {
 
 if sh -n "$CLEAN"; then ok 'sh -n cleanup-orca-sessions.sh'; else not_ok 'sh -n cleanup-orca-sessions.sh'; fi
 
-WT='repo-1::/tmp/adr-wt'
+WT='repo-1::/tmp/devloop-wt'
 BIN="$TMP/bin"
 mkdir -p "$BIN"
 CALLS="$TMP/orca.calls"
@@ -73,8 +73,8 @@ exit 1
 EOF
 chmod +x "$BIN/orca"
 
-LIST_JSON='{"ok":true,"result":{"terminals":[{"handle":"term_done","title":"old review","tabId":"tabA","leafId":"leafA"},{"handle":"term_live","title":"adr-0001-f9-impl-att1","tabId":"tabB","leafId":"leafB"},{"handle":"term_self","title":"coordinator","tabId":"tabC","leafId":"leafC"},{"handle":"term_prefix","title":"adr-0001-f5-impl-old","tabId":"tabD","leafId":"leafD"}]}}'
-PS_JSON='{"ok":true,"result":{"worktrees":[{"worktreeId":"repo-1::/tmp/adr-wt","agents":[{"state":"done","paneKey":"tabA:leafA"},{"state":"working","paneKey":"tabB:leafB"}]}]}}'
+LIST_JSON='{"ok":true,"result":{"terminals":[{"handle":"term_done","title":"old review","tabId":"tabA","leafId":"leafA"},{"handle":"term_live","title":"devloop-0001-f9-impl-att1","tabId":"tabB","leafId":"leafB"},{"handle":"term_self","title":"coordinator","tabId":"tabC","leafId":"leafC"},{"handle":"term_prefix","title":"devloop-0001-f5-impl-old","tabId":"tabD","leafId":"leafD"}]}}'
+PS_JSON='{"ok":true,"result":{"worktrees":[{"worktreeId":"repo-1::/tmp/devloop-wt","agents":[{"state":"done","paneKey":"tabA:leafA"},{"state":"working","paneKey":"tabB:leafB"}]}]}}'
 
 OUT="$TMP/out"
 ERR="$TMP/err"
@@ -92,7 +92,7 @@ env -i PATH="$BIN:/usr/bin:/bin" HOME="$TMP" TMPDIR="$TMP" \
   FAKE_LIST_JSON="$LIST_JSON" FAKE_PS_JSON="$PS_JSON" \
   ORCA_TERMINAL_HANDLE=term_self \
   "$CLEAN" --orca-cli "$BIN/orca" --worktree "$WT" \
-    --keep term_live --title-prefix adr-0001- >"$OUT" 2>"$ERR"
+    --keep term_live --title-prefix devloop-0001- >"$OUT" 2>"$ERR"
 assert_status 'cleanup exits 0' 0 $?
 assert_contains 'closes done session' "$OUT" 'term_done'
 assert_contains 'closes prefixed leftover' "$OUT" 'term_prefix'

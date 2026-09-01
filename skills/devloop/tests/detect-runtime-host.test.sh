@@ -102,12 +102,12 @@ assert_status 'invalid --force exits 2' 2 $?
 
 : >"$CALLS"
 env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \
-  ADR_HOST=tmux TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" \
+  DEVLOOP_HOST=tmux TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" \
   "$DETECT" >"$OUT" 2>"$ERR"
-assert_status 'ADR_HOST=tmux exits 0' 0 $?
-assert_contains 'ADR_HOST=tmux selects tmux' "$OUT" '^host=tmux$'
-assert_contains 'ADR_HOST=tmux reports status skip' "$OUT" '^orca_status=skip$'
-assert_empty_file 'ADR_HOST=tmux does not call Orca status' "$CALLS"
+assert_status 'DEVLOOP_HOST=tmux exits 0' 0 $?
+assert_contains 'DEVLOOP_HOST=tmux selects tmux' "$OUT" '^host=tmux$'
+assert_contains 'DEVLOOP_HOST=tmux reports status skip' "$OUT" '^orca_status=skip$'
+assert_empty_file 'DEVLOOP_HOST=tmux does not call Orca status' "$CALLS"
 
 : >"$CALLS"
 env -i PATH="$BIN:$SYSTEM_PATH" HOME="$TMP_BASE" TMPDIR="$TMP_BASE" \

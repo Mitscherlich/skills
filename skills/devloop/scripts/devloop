@@ -1,16 +1,22 @@
 #!/usr/bin/env sh
-# adr — unified control-plane CLI entry for devloop
+# devloop — unified control-plane CLI entry
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   cat <<'EOF'
-adr — ADR control-plane kernel CLI
+devloop — control-plane kernel CLI
 
-Usage: adr <command> [args]
+Usage: devloop <command> [args]
 
 Commands:
+  init --id ID [--title T] [--root DIR] [--stage S]
+                      Scaffold .devloop/<id>/ from templates/
+  gate intent|spec|plan|goal --file PATH [--intent|--spec|--plan PATH]
+                      Stage exit gate (lint) — 0 pass / 1 fail
+  stage <validate|can|transitions> --from S [--to S]
+                      Pipeline stage machine: intent|spec|plan|loop|done
   doctor              Health check skill tree and tools
   detect-host [...]   Run detect-runtime-host.sh
   detect-scheduler [...]
@@ -19,12 +25,12 @@ Commands:
   lock <acquire|release|check> ...
   state <validate|can|transitions> ...
   status --plan PATH [--json]
-  next --plan PATH [--run-dir DIR]
-  review-packet --adr-dir PATH
+  next --dir .devloop/ID | --plan PATH [--run-dir DIR]
+  review-packet --devloop-dir PATH
   run-tests            Run all tests/*.test.sh
   help
 
-Version: 0.5.1
+Version: 0.6.0
 EOF
 }
 
@@ -33,6 +39,22 @@ cmd=$1
 shift
 
 case "$cmd" in
+  init) exec sh "$HERE/init.sh" "$@" ;;
+  gate) exec sh "$HERE/gate.sh" "$@" ;;
+  stage)
+    [ $# -ge 1 ] || { printf 'error: stage needs a subcommand\n' >&2; exit 2; }
+    sub=$1
+    shift
+    case "$sub" in
+      validate|can|transitions)
+        exec sh "$HERE/state-machine.sh" "stage-$sub" "$@"
+        ;;
+      *)
+        printf 'error: unknown stage subcommand: %s\n' "$sub" >&2
+        exit 2
+        ;;
+    esac
+    ;;
   doctor) exec sh "$HERE/doctor.sh" "$@" ;;
   detect-host|detect-runtime-host)
     exec sh "$HERE/detect-runtime-host.sh" "$@"
@@ -51,7 +73,7 @@ case "$cmd" in
   review-packet|review) exec sh "$HERE/review-packet.sh" "$@" ;;
   run-tests|test) exec sh "$HERE/run-tests.sh" "$@" ;;
   help|-h|--help) usage; exit 0 ;;
-  version|--version) printf '0.5.1\n'; exit 0 ;;
+  version|--version) printf '0.6.0\n'; exit 0 ;;
   *)
     printf 'error: unknown command: %s\n' "$cmd" >&2
     usage >&2

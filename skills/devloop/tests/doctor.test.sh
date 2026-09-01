@@ -3,7 +3,7 @@ set -u
 
 TEST_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 DOCTOR="$TEST_DIR/../scripts/doctor.sh"
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/adr-doctor.test.XXXXXX") || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/devloop-doctor.test.XXXXXX") || exit 1
 PASS=0
 FAIL=0
 

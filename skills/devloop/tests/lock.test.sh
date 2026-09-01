@@ -3,7 +3,7 @@ set -u
 
 TEST_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LOCK="$TEST_DIR/../scripts/lock.sh"
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/adr-lock.test.XXXXXX") || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/devloop-lock.test.XXXXXX") || exit 1
 PASS=0
 FAIL=0
 

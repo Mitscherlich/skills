@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
-# cleanup-orca-sessions.sh — 关闭 ADR worktree 里已完成的 Orca terminal/session
+# cleanup-orca-sessions.sh — 关闭 devloop worktree 里已完成的 Orca terminal/session
 #
 # host=orca 时每个哨兵 tick、以及 impl/reviewer/compiler 完成后调用。
-# 只关「已完成且不在 keep 列表」的 ADR runner terminal；
+# 只关「已完成且不在 keep 列表」的 devloop runner terminal；
 # 不关协调者自己、当前 live impl/reviewer，也不 worktree rm / terminal stop --worktree。
 #
 # 用法:
 #   cleanup-orca-sessions.sh --orca-cli orca --worktree id:<repo>::<path> \
 #     --keep term_live_impl,term_live_review \
-#     --title-prefix adr-<id>- \
+#     --title-prefix devloop-<id>- \
 #     [--also-close term_old1,term_old2] [--dry-run] [--json]
 #
 # 退出码:
@@ -32,7 +32,7 @@ FORMAT=kv
 usage() {
   cat <<'EOF'
 Usage: cleanup-orca-sessions.sh --orca-cli PATH --worktree id:<repo>::<path>
-       [--keep h1,h2] [--also-close h3,h4] [--title-prefix adr-<id>-]
+       [--keep h1,h2] [--also-close h3,h4] [--title-prefix devloop-<id>-]
        [--dry-run] [--json]
 EOF
   exit 2
@@ -48,12 +48,12 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1; shift ;;
     --json) FORMAT=json; shift ;;
     -h|--help) usage ;;
-    *) adr_die "unknown arg: $1" ;;
+    *) dl_die "unknown arg: $1" ;;
   esac
 done
 
-[ -n "$ORCA_CLI" ] || adr_die "--orca-cli required"
-[ -n "$WORKTREE" ] || adr_die "--worktree required"
+[ -n "$ORCA_CLI" ] || dl_die "--orca-cli required"
+[ -n "$WORKTREE" ] || dl_die "--worktree required"
 
 SELF=${ORCA_TERMINAL_HANDLE:-}
 
@@ -81,7 +81,7 @@ SCAN_HANDLES=""
 SCAN_ERR=""
 
 if [ "$HAVE_PY" -eq 1 ]; then
-  _scan_dir=$(mktemp -d "${TMPDIR:-/tmp}/adr-cleanup.XXXXXX") || _scan_dir=""
+  _scan_dir=$(mktemp -d "${TMPDIR:-/tmp}/devloop-cleanup.XXXXXX") || _scan_dir=""
   if [ -n "$_scan_dir" ]; then
     if "$ORCA_CLI" terminal list --worktree "$WORKTREE" --json >"$_scan_dir/list.json" 2>/dev/null; then
       "$ORCA_CLI" worktree ps --json >"$_scan_dir/ps.json" 2>/dev/null || printf '%s\n' '{}' >"$_scan_dir/ps.json"
@@ -186,12 +186,12 @@ close_one() {
 if [ -n "$CANDIDATES" ]; then
   printf '%s\n' "$CANDIDATES" | while IFS= read -r h; do
     printf '%s\n' "$h"
-  done >"${TMPDIR:-/tmp}/adr-cleanup-handles.$$"
+  done >"${TMPDIR:-/tmp}/devloop-cleanup-handles.$$"
   while IFS= read -r h; do
     [ -n "$h" ] || continue
     close_one "$h"
-  done <"${TMPDIR:-/tmp}/adr-cleanup-handles.$$"
-  rm -f "${TMPDIR:-/tmp}/adr-cleanup-handles.$$"
+  done <"${TMPDIR:-/tmp}/devloop-cleanup-handles.$$"
+  rm -f "${TMPDIR:-/tmp}/devloop-cleanup-handles.$$"
 fi
 
 json_escape() {

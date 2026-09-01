@@ -114,12 +114,12 @@ env -i PATH="/usr/bin:/bin" CLAUDECODE=1 \
 assert_status '--force loop on claude exits 0' 0 $?
 assert_contains '--force loop on claude uses loop' "$OUT" '^scheduler=loop$'
 
-env -i PATH="/usr/bin:/bin" ADR_SCHEDULER=cron OMPCODE=1 \
+env -i PATH="/usr/bin:/bin" DEVLOOP_SCHEDULER=cron OMPCODE=1 \
   "$DETECT" >"$OUT" 2>"$ERR"
-assert_status 'ADR_SCHEDULER=cron on omp exits 0' 0 $?
-assert_contains 'ADR_SCHEDULER=cron selects cron' "$OUT" '^scheduler=cron$'
+assert_status 'DEVLOOP_SCHEDULER=cron on omp exits 0' 0 $?
+assert_contains 'DEVLOOP_SCHEDULER=cron selects cron' "$OUT" '^scheduler=cron$'
 
-env -i PATH="/usr/bin:/bin" ADR_COORDINATOR=grok \
+env -i PATH="/usr/bin:/bin" DEVLOOP_COORDINATOR=grok \
   "$DETECT" --json >"$OUT" 2>"$ERR"
 assert_status '--json grok override exits 0' 0 $?
 assert_contains 'json coordinator' "$OUT" '"coordinator": "grok"'

@@ -38,12 +38,12 @@ parse_common() {
       --phase) phase=$2; shift 2 ;;
       --timeout-sec) timeout=$2; shift 2 ;;
       -h|--help) usage ;;
-      *) adr_die "unknown arg: $1" ;;
+      *) dl_die "unknown arg: $1" ;;
     esac
   done
-  [ -n "$run_dir" ] || adr_die "--run-dir required"
-  [ -n "$phase" ] || adr_die "--phase required"
-  valid_phase "$phase" || adr_die "invalid phase: $phase"
+  [ -n "$run_dir" ] || dl_die "--run-dir required"
+  [ -n "$phase" ] || dl_die "--phase required"
+  valid_phase "$phase" || dl_die "invalid phase: $phase"
   mkdir -p "$run_dir"
   LOCK_PATH="$run_dir/.lock-$phase"
 }
@@ -93,5 +93,5 @@ case "$cmd" in
   release) cmd_release "$@" ;;
   check) cmd_check "$@" ;;
   -h|--help) usage ;;
-  *) adr_die "unknown command: $cmd" ;;
+  *) dl_die "unknown command: $cmd" ;;
 esac

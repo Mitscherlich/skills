@@ -1,5 +1,5 @@
-# ADR loop 控制面产物（本地 session 状态，不入库）
-.adr/
+# devloop 控制面产物（本地 session 状态，不入库）
+.devloop/
 
 # local scratch / generated previews
 .temp/

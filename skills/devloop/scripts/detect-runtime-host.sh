@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# detect-runtime-host.sh — 确定性探测 ADR loop 执行宿主（host）
+# detect-runtime-host.sh — 确定性探测 devloop 执行宿主（host）
 #
 # 进入 loop 时由协调 agent 直接执行本脚本；不要靠读文档/环境变量自行推理。
 # 零第三方依赖；只依赖 POSIX sh + 本机 PATH 中的命令。
@@ -9,7 +9,7 @@
 #   detect-runtime-host.sh --prefer orca   # 优先 orca，不可用则降级
 #   detect-runtime-host.sh --force tmux    # 强制 host（仍会填可用字段）
 #   detect-runtime-host.sh --json          # JSON 输出（默认 key=value）
-#   ADR_HOST=orca detect-runtime-host.sh   # 环境变量等同 --force
+#   DEVLOOP_HOST=orca detect-runtime-host.sh   # 环境变量等同 --force
 #
 # 退出码:
 #   0  已选出可用 host（orca 或 tmux）
@@ -72,11 +72,11 @@ while [ $# -gt 0 ]; do
 done
 
 # 环境变量覆盖（与 --force 同效；CLI --force 优先）
-if [ -z "$FORCE" ] && [ -n "${ADR_HOST:-}" ]; then
-  case "$ADR_HOST" in
-    orca|tmux) FORCE=$ADR_HOST ;;
+if [ -z "$FORCE" ] && [ -n "${DEVLOOP_HOST:-}" ]; then
+  case "$DEVLOOP_HOST" in
+    orca|tmux) FORCE=$DEVLOOP_HOST ;;
     *)
-      echo "error: ADR_HOST must be orca|tmux (got: $ADR_HOST)" >&2
+      echo "error: DEVLOOP_HOST must be orca|tmux (got: $DEVLOOP_HOST)" >&2
       exit 2
       ;;
   esac
@@ -274,7 +274,7 @@ else
     auto)
       # 仅当处于 Orca 托管环境（环境变量信号）时才自动选 orca。
       # 本机装了 orca CLI、app 在跑但当前 shell 不是 Orca 终端 → 仍用 tmux，
-      # 避免「装了 Orca 就到处扇出」；需要时用 --force orca / ADR_HOST=orca。
+      # 避免「装了 Orca 就到处扇出」；需要时用 --force orca / DEVLOOP_HOST=orca。
       if [ "$ORCA_ENV" -eq 1 ]; then
         _want_orca=1
       fi

@@ -21,11 +21,11 @@ while [ $# -gt 0 ]; do
     --plan) plan=$2; shift 2 ;;
     --json) json=1; shift ;;
     -h|--help) usage ;;
-    *) adr_die "unknown arg: $1" ;;
+    *) dl_die "unknown arg: $1" ;;
   esac
 done
-[ -n "$plan" ] || adr_die "--plan required"
-[ -f "$plan" ] || adr_die "plan not found: $plan"
+[ -n "$plan" ] || dl_die "--plan required"
+[ -f "$plan" ] || dl_die "plan not found: $plan"
 
 open_id=
 open_name=
@@ -83,7 +83,7 @@ else
 fi
 
 if [ "$open_n" -gt 1 ]; then
-  adr_warn "multiple open slices: $open_n"
+  dl_warn "multiple open slices: $open_n"
   exit 1
 fi
 exit 0

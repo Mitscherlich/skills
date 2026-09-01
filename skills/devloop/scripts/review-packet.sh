@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# review-packet.sh — compact human-facing summary of an ADR control-plane dir
-# Usage: review-packet.sh --adr-dir PATH
+# review-packet.sh — compact human-facing summary of a devloop control-plane dir
+# Usage: review-packet.sh --devloop-dir PATH
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -9,36 +9,73 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   cat <<'EOF'
-Usage: review-packet.sh --adr-dir PATH
+Usage: review-packet.sh --devloop-dir PATH
 EOF
   exit 2
 }
 
-adr_dir=
+devloop_dir=
 while [ $# -gt 0 ]; do
   case "$1" in
-    --adr-dir) adr_dir=$2; shift 2 ;;
+    --devloop-dir) devloop_dir=$2; shift 2 ;;
     -h|--help) usage ;;
-    *) adr_die "unknown arg: $1" ;;
+    *) dl_die "unknown arg: $1" ;;
   esac
 done
-[ -n "$adr_dir" ] || adr_die "--adr-dir required"
-[ -d "$adr_dir" ] || adr_die "not a directory: $adr_dir"
+[ -n "$devloop_dir" ] || dl_die "--devloop-dir required"
+[ -d "$devloop_dir" ] || dl_die "not a directory: $devloop_dir"
 
-plan="$adr_dir/plan.md"
-progress="$adr_dir/progress.md"
-run_dir="$adr_dir/run"
+plan="$devloop_dir/plan.md"
+progress="$devloop_dir/progress.md"
+run_dir="$devloop_dir/run"
 
-printf '# ADR review packet\n\n'
-printf 'adr_dir: %s\n' "$adr_dir"
-printf 'generated: %s\n\n' "$(adr_utc_stamp)"
+printf '# devloop review packet\n\n'
+printf 'devloop_dir: %s\n' "$devloop_dir"
+printf 'generated: %s\n\n' "$(dl_utc_stamp)"
+
+intent="$devloop_dir/intent.md"
+spec="$devloop_dir/spec.md"
+
+printf '## Pipeline\n\n'
+printf '| 阶段 | 产物 | 门禁 |\n|---|---|---|\n'
+gate_row() {
+  _stage=$1
+  _file=$2
+  shift 2
+  if [ ! -f "$_file" ]; then
+    printf '| %s | 缺失 | - |\n' "$_stage"
+    return
+  fi
+  if _out=$(sh "$HERE/gate.sh" "$_stage" --file "$_file" "$@" 2>/dev/null); then
+    printf '| %s | %s | pass |\n' "$_stage" "$(basename "$_file")"
+  else
+    _n=$(printf '%s\n' "$_out" | grep -c '^fail=' || true)
+    printf '| %s | %s | **FAIL**(%s) |\n' "$_stage" "$(basename "$_file")" "$(printf '%s' "$_n" | tr -d ' ')"
+  fi
+}
+gate_row intent "$intent"
+if [ -f "$intent" ]; then
+  gate_row spec "$spec" --intent "$intent"
+else
+  gate_row spec "$spec"
+fi
+if [ -f "$spec" ]; then
+  gate_row plan "$plan" --spec "$spec"
+else
+  gate_row plan "$plan"
+fi
+printf '\n'
 
 if [ -f "$plan" ]; then
   printf '## Status\n\n'
   printf '```\n'
   sh "$HERE/status.sh" --plan "$plan" 2>/dev/null || sh "$HERE/status.sh" --plan "$plan" 2>&1 || true
   printf '```\n\n'
-  printf '## Next action\n\n'
+  printf '## Next action (pipeline)\n\n'
+  printf '```\n'
+  sh "$HERE/next-action.sh" --dir "$devloop_dir" 2>/dev/null || true
+  printf '```\n\n'
+  printf '## Next action (slice)\n\n'
   printf '```\n'
   if [ -d "$run_dir" ]; then
     sh "$HERE/next-action.sh" --plan "$plan" --run-dir "$run_dir" 2>/dev/null || true

@@ -24,10 +24,10 @@ cmd_new() {
     case "$1" in
       --prefix) prefix=$2; shift 2 ;;
       -h|--help) usage ;;
-      *) adr_die "unknown arg: $1" ;;
+      *) dl_die "unknown arg: $1" ;;
     esac
   done
-  stamp=$(adr_utc_stamp)
+  stamp=$(dl_utc_stamp)
   # random-ish suffix from pid + RANDOM if available
   suf=${RANDOM:-$$}
   printf '%s-%s-%s\n' "$prefix" "$stamp" "$suf"
@@ -41,12 +41,12 @@ cmd_archive() {
       --run-dir) run_dir=$2; shift 2 ;;
       --attempt-id) attempt_id=$2; shift 2 ;;
       -h|--help) usage ;;
-      *) adr_die "unknown arg: $1" ;;
+      *) dl_die "unknown arg: $1" ;;
     esac
   done
-  [ -n "$run_dir" ] || adr_die "--run-dir required"
-  [ -n "$attempt_id" ] || adr_die "--attempt-id required"
-  [ -d "$run_dir" ] || adr_die "run-dir not a directory: $run_dir"
+  [ -n "$run_dir" ] || dl_die "--run-dir required"
+  [ -n "$attempt_id" ] || dl_die "--attempt-id required"
+  [ -d "$run_dir" ] || dl_die "run-dir not a directory: $run_dir"
 
   dest="$run_dir/archive/$attempt_id"
   mkdir -p "$dest"
@@ -69,5 +69,5 @@ case "$cmd" in
   new) cmd_new "$@" ;;
   archive) cmd_archive "$@" ;;
   -h|--help) usage ;;
-  *) adr_die "unknown command: $cmd" ;;
+  *) dl_die "unknown command: $cmd" ;;
 esac

@@ -6,7 +6,7 @@ SCRIPT=$0
 HERE=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
 # shellcheck disable=SC1091
 . "$HERE/lib/common.sh"
-ROOT=$(adr_skill_root "$HERE/doctor.sh")
+ROOT=$(dl_skill_root "$HERE/doctor.sh")
 
 PASS=0
 FAIL=0
@@ -48,12 +48,20 @@ need_sh_n() {
   fi
 }
 
-printf 'adr doctor — root=%s\n' "$ROOT"
+printf 'devloop doctor — root=%s\n' "$ROOT"
 
 need_file "$ROOT/SKILL.md"
 need_file "$ROOT/ROADMAP.md"
-need_file "$ROOT/references/plan-template.md"
+need_file "$ROOT/references/pipeline.md"
 need_file "$ROOT/references/goal-template.md"
+need_file "$ROOT/references/control-plane.md"
+need_file "$ROOT/templates/intent.md"
+need_file "$ROOT/templates/spec.md"
+need_file "$ROOT/templates/plan.md"
+need_file "$ROOT/templates/next-goal.md"
+need_file "$ROOT/templates/progress.md"
+need_file "$ROOT/scripts/gate.sh"
+need_file "$ROOT/scripts/init.sh"
 need_file "$ROOT/scripts/detect-runtime-host.sh"
 need_file "$ROOT/scripts/detect-loop-scheduler.sh"
 need_file "$ROOT/scripts/cleanup-orca-sessions.sh"
@@ -61,6 +69,10 @@ need_file "$ROOT/scripts/launch-runner-template.sh"
 need_file "$ROOT/scripts/lib/common.sh"
 need_file "$ROOT/scripts/doctor.sh"
 
+need_sh_n "$ROOT/scripts/gate.sh"
+need_sh_n "$ROOT/scripts/init.sh"
+need_sh_n "$ROOT/scripts/next-action.sh"
+need_sh_n "$ROOT/scripts/state-machine.sh"
 need_sh_n "$ROOT/scripts/detect-runtime-host.sh"
 need_sh_n "$ROOT/scripts/detect-loop-scheduler.sh"
 need_sh_n "$ROOT/scripts/cleanup-orca-sessions.sh"
@@ -72,7 +84,7 @@ need_sh_n "$ROOT/scripts/doctor.sh"
 if command -v tmux >/dev/null 2>&1; then
   ok "path:tmux"
 else
-  adr_warn "tmux not on PATH (tmux host unavailable)"
+  dl_warn "tmux not on PATH (tmux host unavailable)"
   bad "path:tmux"
 fi
 

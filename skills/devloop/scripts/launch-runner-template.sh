@@ -1,19 +1,19 @@
 #!/bin/sh
-# ADR loop runner 启动器模板（host=tmux 时在 tmux 内运行）。
+# devloop runner 启动器模板（host=tmux 时在 tmux 内运行）。
 # 用法: launch-runner.sh <slice>   例: launch-runner.sh f1
 #
 # 仅当执行宿主 host=tmux 时使用本脚本。
 # 若进入 loop 时探测到 Orca 环境（host=orca），改用 orca-cli 扇出 agent，
 # 见 references/orca-host.md —— 不要在本脚本里模拟 Orca。
 #
-# 复制到 <worktree>/.adr/<id>/run/launch-runner.sh 后改五处：
-#   1. ADR_ID= ADR 目录名
+# 复制到 <worktree>/.devloop/<id>/run/launch-runner.sh 后改五处：
+#   1. DEVLOOP_ID= devloop 目录名
 #   2. WT= worktree 绝对路径
 #   3. IMPL= 实现子进程名称（claude-code / codex / grok；默认 claude-code）
 #   4. 代理段（不需要代理可整段删除）
 #   5. IMPL 命令（claude-code / codex / grok 三选一，见文末）
-# 点火可用 sh "$WT/.adr/$ADR_ID/run/launch-runner.sh" <slice>；chmod +x 后也可直接执行。
-# tmux session 建议命名为 adr-${ADR_ID}-<slice>，避免多 ADR 并发撞名。
+# 点火可用 sh "$WT/.devloop/$DEVLOOP_ID/run/launch-runner.sh" <slice>；chmod +x 后也可直接执行。
+# tmux session 建议命名为 devloop-${DEVLOOP_ID}-<slice>，避免多 devloop 并发撞名。
 #
 # 无人值守要点：
 #   - tmux 新 session 不继承 shell 环境：PATH 显式写、cd 显式做
@@ -23,12 +23,12 @@
 #   - runner 只写交付报告；验收报告由后续跨工具 reviewer 写（默认 ≠ IMPL）
 #   - 对抗验收：impl=claude-code → reviewer 默认 codex 或 grok（见 SKILL.md 配对表）
 set -eu
-ADR_ID='<id>'
+DEVLOOP_ID='<id>'
 WT=/abs/path/to/worktree
 IMPL=claude-code
 SLICE="${1:?usage: launch-runner.sh <slice>}"
 
-# ── 1/2. ADR ID 与 worktree 绝对路径（必改）─────────────────
+# ── 1/2. devloop ID 与 worktree 绝对路径（必改）─────────────────
 cd "$WT"
 
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
@@ -46,10 +46,10 @@ export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
 # NP="$NP,.example.com,.corp.example"
 # export no_proxy="$NP" NO_PROXY="$NP"
 
-GOAL="$WT/.adr/${ADR_ID}/next-goal.md"
-LOG="$WT/.adr/${ADR_ID}/run/${IMPL}-${SLICE}.log"
-REPORT="$WT/.adr/${ADR_ID}/run/${IMPL}-${SLICE}-report.md"
-export ADR_LOOP_REPORT="$REPORT"
+GOAL="$WT/.devloop/${DEVLOOP_ID}/next-goal.md"
+LOG="$WT/.devloop/${DEVLOOP_ID}/run/${IMPL}-${SLICE}.log"
+REPORT="$WT/.devloop/${DEVLOOP_ID}/run/${IMPL}-${SLICE}-report.md"
+export DEVLOOP_REPORT="$REPORT"
 
 # ── 5a. impl = claude-code（默认）───────────────────────────
 claude -p \

@@ -3,7 +3,7 @@ set -u
 
 TEST_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ATT="$TEST_DIR/../scripts/attempt.sh"
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/adr-attempt.test.XXXXXX") || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/devloop-attempt.test.XXXXXX") || exit 1
 PASS=0
 FAIL=0
 

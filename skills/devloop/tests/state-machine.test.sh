@@ -39,6 +39,34 @@ fi
 out=$(sh "$SM" transitions --from open)
 echo "$out" | grep -qx implementing && ok 'transitions lists implementing' || not_ok 'transitions lists implementing'
 
+
+# ── 管线阶段轴 ────────────────────────────────────────────────
+sm_can() { sh "$SM" stage-can --from "$1" --to "$2"; }
+
+sm_can intent spec && ok 'stage intent->spec' || not_ok 'stage intent->spec'
+sm_can spec plan && ok 'stage spec->plan' || not_ok 'stage spec->plan'
+sm_can plan loop && ok 'stage plan->loop' || not_ok 'stage plan->loop'
+sm_can loop done && ok 'stage loop->done' || not_ok 'stage loop->done'
+sm_can spec intent && ok 'stage spec->intent 打回' || not_ok 'stage spec->intent 打回'
+sm_can plan spec && ok 'stage plan->spec 打回' || not_ok 'stage plan->spec 打回'
+sm_can loop plan && ok 'stage loop->plan 重规划' || not_ok 'stage loop->plan 重规划'
+sm_can done loop && ok 'stage done->loop re-open' || not_ok 'stage done->loop re-open'
+
+sm_can intent plan && not_ok 'stage 拒绝 intent->plan 跳级' || ok 'stage 拒绝 intent->plan 跳级'
+sm_can intent loop && not_ok 'stage 拒绝 intent->loop 跳级' || ok 'stage 拒绝 intent->loop 跳级'
+sm_can spec loop && not_ok 'stage 拒绝 spec->loop 跳级' || ok 'stage 拒绝 spec->loop 跳级'
+sm_can done intent && not_ok 'stage 拒绝 done->intent' || ok 'stage 拒绝 done->intent'
+
+out=$(sh "$SM" stage-validate --from intent --to spec)
+echo "$out" | grep -qx 'kind=stage' && ok 'stage-validate 标注 kind' || not_ok 'stage-validate 标注 kind'
+
+tr_out=$(sh "$SM" stage-transitions --from plan)
+echo "$tr_out" | grep -qx 'loop' && ok 'stage-transitions 列出 loop' || not_ok 'stage-transitions 列出 loop'
+echo "$tr_out" | grep -qx 'spec' && ok 'stage-transitions 列出 spec' || not_ok 'stage-transitions 列出 spec'
+
+# 两套状态机互不串味
+sm_can open spec && not_ok '切片状态与阶段不串' || ok '切片状态与阶段不串'
+
 TOTAL=$((PASS + FAIL))
 printf '1..%s\n' "$TOTAL"
 [ "$FAIL" -eq 0 ] || exit 1
