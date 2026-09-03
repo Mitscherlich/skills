@@ -51,7 +51,7 @@ env -i PATH="/usr/bin:/bin" OMPCODE=1 CLAUDECODE=1 \
   "$DETECT" >"$OUT" 2>"$ERR"
 assert_status 'omp without orca asks' 1 $?
 assert_contains 'omp wins over CLAUDECODE' "$OUT" '^coordinator=omp$'
-assert_contains 'omp does not support /loop' "$OUT" '^loop_supported=0$'
+assert_contains 'omp yield /loop is not interval loop_supported' "$OUT" '^loop_supported=0$'
 assert_contains 'omp without orca is ask' "$OUT" '^scheduler=ask$'
 
 env -i PATH="/usr/bin:/bin" OMPCODE=1 CLAUDECODE=1 TERM_PROGRAM=Orca \

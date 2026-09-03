@@ -1,12 +1,14 @@
 #!/usr/bin/env sh
-# detect-loop-scheduler.sh — 探测协调者是否支持 /loop，并选出哨兵调度
+# detect-loop-scheduler.sh — 探测协调者是否支持间隔 /loop，并选出哨兵调度
 #
 # 进入 loop 点火哨兵前由协调 agent 执行；禁止靠读文档/环境变量自行推理。
 # 零第三方依赖；只依赖 POSIX sh。
 #
 # 自动决策:
-#   1. 协调者支持 /loop（claude-code / codex / grok）→ scheduler=loop
-#   2. 不支持且当前是 Orca 环境 → scheduler=orca-automation（自动，告知用户）
+#   1. 协调者支持间隔 /loop（/loop 10m <tick> = 每 10 分钟再跑）→ scheduler=loop
+#      目前：claude-code / codex / grok。OMP 18.1+ 有同名 /loop，但是 yield 后立刻重投
+#      （/loop 10m = 连续重投最多 10 分钟），不能当哨兵。
+#   2. 无间隔 /loop 且当前是 Orca 环境 → scheduler=orca-automation（自动，告知用户）
 #   3. 其他场景 → scheduler=ask（询问用户）
 #
 # 用法:
@@ -132,6 +134,7 @@ detect_orca_env() {
   return 1
 }
 
+# loop_supported=1 只认间隔调度 /loop。omp 的 yield-repeat /loop 不算。
 loop_ok_for() {
   case "$1" in
     claude-code|codex|grok) return 0 ;;
@@ -168,10 +171,10 @@ if [ -n "$FORCE" ]; then
   if [ "$FORCE" = "loop" ]; then
     if [ "$LOOP_SUPPORTED" -eq 1 ]; then
       SCHEDULER=loop
-      REASON="user requested /loop and coordinator=$COORDINATOR supports it"
+      REASON="user requested /loop and coordinator=$COORDINATOR supports interval /loop"
     else
       SCHEDULER=ask
-      REASON="user requested /loop but coordinator=$COORDINATOR does not support /loop"
+      REASON="user requested /loop but coordinator=$COORDINATOR has no interval /loop (omp yield /loop is not a 10-minute sentinel)"
     fi
   elif [ "$FORCE" = "orca-automation" ]; then
     SCHEDULER=orca-automation
@@ -182,13 +185,13 @@ if [ -n "$FORCE" ]; then
   fi
 elif [ "$LOOP_SUPPORTED" -eq 1 ]; then
   SCHEDULER=loop
-  REASON="coordinator=$COORDINATOR supports /loop"
+  REASON="coordinator=$COORDINATOR supports interval /loop"
 elif [ "$ORCA_ENV" -eq 1 ]; then
   SCHEDULER=orca-automation
-  REASON="coordinator=$COORDINATOR does not support /loop; orca env present, auto-use Orca automation and tell the user"
+  REASON="coordinator=$COORDINATOR has no interval /loop; orca env present, auto-use Orca automation and tell the user"
 else
   SCHEDULER=ask
-  REASON="coordinator=$COORDINATOR does not support /loop and not in orca; ask user"
+  REASON="coordinator=$COORDINATOR has no interval /loop and not in orca; ask user"
 fi
 
 json_escape() {

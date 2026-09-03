@@ -238,7 +238,7 @@ grill 可以先在当前 checkout 写 `.devloop/<id>/`，但进入执行 worktre
 
 ### 0.5 解析哨兵调度（进入 loop 时必做）
 
-host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调者（主会话 harness）和 impl/reviewer 不是一回事：Orca 里用 omp 当协调者很常见，omp **没有** `/loop`。
+host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调者（主会话 harness）和 impl/reviewer 不是一回事。`loop_supported=1` 只认**间隔调度** `/loop`（`/loop 10m <tick>` = 每 10 分钟再跑）。Claude Code / Grok 是这种。OMP 18.1+ 虽有同名 `/loop`，但是 yield 后立刻重投（`/loop 10m` = 连续重投最多 10 分钟），**不能当哨兵**；Orca 里用 omp 当协调者时走 `orca-automation`。
 
 ```bash
 <path-to-skill>/scripts/devloop detect-scheduler
@@ -248,7 +248,7 @@ host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调�
 | 字段 | 含义 |
 |---|---|
 | `coordinator` | `claude-code` / `codex` / `grok` / `omp` / `pi` / `unknown` |
-| `loop_supported` | `1` 才能用 `/loop`；仅 `claude-code` / `codex` / `grok` |
+| `loop_supported` | `1` 才能用间隔 `/loop`；仅 `claude-code` / `codex` / `grok`。omp 的 yield `/loop` 不算 |
 | `orca_env` | `1` = 当前在 Orca |
 | `scheduler` | `loop` / `orca-automation` / `cron` / `ask` — **直接采用，勿再推理** |
 | `reason` | 写入 progress.md |
@@ -261,12 +261,12 @@ host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调�
 
 按 `scheduler=` 执行（禁止自己改判）：
 
-- **`loop`**：当前协调者支持 `/loop`，直接建每 10 分钟的 `/loop`（避开整点分钟）。
-- **`orca-automation`**：协调者没有 `/loop`，但人在 Orca。**自动**用 Orca automations 当哨兵，并**告知用户**：当前协调者是 `<coordinator>`，不支持 `/loop`，已改用 Orca automation，不必换 agent。不要再问「cron 还是换人」，也不要另建 crontab。
+- **`loop`**：当前协调者支持间隔 `/loop`，直接建每 10 分钟的 `/loop`（避开整点分钟）。
+- **`orca-automation`**：协调者没有间隔 `/loop`，但人在 Orca。**自动**用 Orca automations 当哨兵，并**告知用户**：当前协调者是 `<coordinator>`，没有间隔 `/loop`（omp 的 yield `/loop` 不能当 10 分钟哨兵），已改用 Orca automation，不必换 agent。不要再问「cron 还是换人」，也不要另建 crontab。
   - `ORCA automations create --name devloop-<id>-sentinel --trigger "<避开整点的 10 分钟 cron>" --workspace active --reuse-session --prompt "<tick prompt>" --json`
   - `--reuse-session` 打回当前协调者会话；`--provider` 以 `ORCA automations create --help` 为准，不要另开第二个协调者。
   - 把 automation id 写入 progress / plan 确认记录。
-- **`ask`**：不支持 `/loop`，也不在 Orca。告诉用户当前协调者不支持 `/loop`，请选：本机 cronjob / launchd，或换 claude-code / codex / grok 再进 loop。未选之前 progress 记 `paused(待选哨兵调度)`，不创建 cron、不点火。
+- **`ask`**：不支持间隔 `/loop`，也不在 Orca。告诉用户当前协调者不能用间隔 `/loop` 当哨兵，请选：本机 cronjob / launchd，或换 claude-code / codex / grok 再进 loop。未选之前 progress 记 `paused(待选哨兵调度)`，不创建 cron、不点火。
 - 用户已书面选定后才用 `--force loop|cron|orca-automation`。`--force loop` 在 `loop_supported=0` 时仍会 `ask`。
 
 ### 隔离执行区
@@ -494,8 +494,8 @@ reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代
 | reviewer 看不到 impl commit | 误开了第二个 worktree | 强制同一 `worktree.id`；废掉平行树后重跑验收 |
 | `terminal_handle_stale` | Orca 重启或 handle 过期 | `terminal list` 取新 handle，只对新 handle send |
 | agent 自行猜 host 与脚本不一致 | 未跑 detect 脚本 | **以脚本 stdout 为准**；重跑并覆盖 plan/progress |
-| 协调者是 omp 且不在 Orca，却去建 cron / 假装 `/loop` | 未跑 `detect-scheduler` 或把 ask 当成 cron | **停下来问用户**：换 claude-code / codex / grok，或明确授权 cronjob；未选不得点火 |
-| 协调者无 `/loop` 且在 Orca，却去问用户或建 crontab | 应自动走 Orca automation | 按脚本 `scheduler=orca-automation` 建 automation 并告知用户，不要再问 |
+| 协调者是 omp，却把 yield-`/loop` 当 10 分钟哨兵 | OMP `/loop 10m` 是连续重投 10 分钟，不是每 10 分钟；`loop_supported` 仍为 0 | 以 `detect-scheduler` 为准：Orca 走 automation；否则 ask。禁止把 omp `/loop` 当间隔哨兵 |
+| 协调者无间隔 `/loop` 且在 Orca，却去问用户或建 crontab | 应自动走 Orca automation | 按脚本 `scheduler=orca-automation` 建 automation 并告知用户，不要再问 |
 | Orca 内存持续涨、terminal 越积越多 | 已完成 impl/review session 未关 | 每个 tick 跑 `devloop cleanup-sessions`；只 keep 当前 live handle |
 
 ## 参考

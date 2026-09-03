@@ -166,9 +166,9 @@ ORCA worktree set --worktree id:<repoId>::<path> --comment "devloop <id> F2 acce
 
 只在 `detect-loop-scheduler.sh` 给出 `scheduler=loop|orca-automation|cron` 之后建哨兵。
 
-- `scheduler=loop`：协调者自己的 `/loop`。
-- `scheduler=orca-automation`（典型：协调者是 omp）：**自动** `ORCA automations create --workspace active --reuse-session`，并告知用户「当前协调者不支持 `/loop`，已改用 Orca automation」。不要再问 cron / 换人，也不要另建 crontab。
-- `scheduler=ask`：不在 Orca 且无 `/loop` 才问用户。
+- `scheduler=loop`：协调者自己的**间隔** `/loop`（每 10 分钟）。
+- `scheduler=orca-automation`（典型：协调者是 omp）：**自动** `ORCA automations create --workspace active --reuse-session`，并告知用户「当前协调者没有间隔 `/loop`（omp 的 yield `/loop` 不能当哨兵），已改用 Orca automation」。不要再问 cron / 换人，也不要另建 crontab。
+- `scheduler=ask`：不在 Orca 且无间隔 `/loop` 才问用户。
 
 每 10 分钟先用原子 `mkdir .devloop/<id>/run/.lock-<phase>` 抢占 `compile|impl|review|advance` 锁；未抢到立即退出，锁拥有者完成后释放，避免两个 tick 重复扇出。然后：
 
@@ -216,7 +216,7 @@ ORCA worktree ps --json
 | `terminal create --command` 不识别 agent | 查本机已装 agent；换配对或请用户安装 |
 | 单 terminal 卡死 / handle stale | 核对 worktree+title+attempt 后 `terminal close --terminal <handle>`，重建并生成新 attempt；禁止默认 `terminal stop --worktree` |
 | 用户 `--host=tmux` | 全程走 launch-runner.sh + tmux，忽略 Orca 扇出 |
-| 协调者无 `/loop` 且 `orca_env=1` | 自动 Orca automation 并告知用户；禁止再问、禁止另建 crontab |
+| 协调者无间隔 `/loop` 且 `orca_env=1` | 自动 Orca automation 并告知用户；禁止再问、禁止另建 crontab；禁止把 omp yield `/loop` 当哨兵 |
 
 ## 最小命令清单（备忘）
 
