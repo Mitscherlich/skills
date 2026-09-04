@@ -1,7 +1,7 @@
 ---
 name: devloop
 description: Use when the user wants an unattended AI-native delivery loop (devloop), asks to turn a raw requirement into intent.md → spec.md → plan.md → verified local commits, continue an existing .devloop/<id>/ pipeline, or run implementation with stage gates, detect-runtime-host, attempt-bound handover, and cross-tool reviewer acceptance through tmux or Orca.
-version: 0.6.0
+version: 0.6.1
 ---
 
 # devloop（intent → spec → plan → loop 无人值守交付）
@@ -42,7 +42,7 @@ version: 0.6.0
 
 本 skill 的顺序不可重排：
 
-1. **grill → intent.md**：先深挖意图，结论**边聊边回写**活文档。
+1. **grill → intent.md**：先深挖意图，提问通道逐题问，结论**边聊边回写**活文档。
 2. **门禁 A**：`gate intent` 全绿 + 人工审阅签「通过」。
 3. **intent.md → spec.md**：编译为 actionable 规格，**消除过程性记录**。
 4. **门禁 B**：`gate spec --intent` 全绿 + 签署「通过」。
@@ -61,6 +61,7 @@ version: 0.6.0
 - **禁止把 runner 自报完成当成完成**。impl 退出后必须委派**验收 reviewer**（默认与 impl **不同**的 agent 工具）做对抗式检查；没有验收 reviewer 的「全部完成」结论，就不能把下一片置为 open，也不能进入最终汇总。
 - **禁止默认同工具自检冒充对抗验收**。未显式指定 `--reviewer=` 时，必须按下方默认配对表选择与 `--impl` 不同的工具。**任何同工具验收都必须先取得用户明确授权，并在 plan.md 确认记录与 progress.md 写明授权原文/原因**；「只剩一个工具」只触发询问，不自动豁免。
 - **禁止 next-goal.md 与 plan.md 打架**。goal 只是 plan 某一行的展开，不得新增需求、不得改切片状态；冲突时以 plan.md 为准（边界表见 `references/pipeline.md`）。
+- **禁止把 grill 的整轮 frontier 一次抛给用户。** 先产出问题，再走提问通道一次一题；没有该工具时纯文本也一次一题。
 
 ## 可选依赖（开源安装）
 
@@ -71,7 +72,7 @@ version: 0.6.0
 | 阶段 4 | [`qiaomu-goal-meta-skill`](https://github.com/joeseesun/qiaomu-goal-meta-skill)（MIT） | 把切片措辞打磨得更锐利 | `npx skills add joeseesun/qiaomu-goal-meta-skill` | 按 `templates/next-goal.md` 的七字段句式填写，效果等价 |
 | host=orca | `orca-cli` skill + 本机 `orca` CLI | worktree / terminal 扇出 impl·reviewer | Orca 应用自带 CLI；会话内 `ORCA skills get orca-cli` | 降级 `host=tmux` + `scripts/launch-runner-template.sh` |
 
-装了 `grill-me` / `grilling` 可直接用，与内联算法等价。阶段 1 的访谈算法（design tree / frontier / rounds）改写自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `grilling`（MIT）。
+装了 `grill-me` / `grilling` 时，只复用其 design tree / frontier 算法；提问必须走提问通道（grilling 原文是一轮问完整个 frontier，这里不采用）。阶段 1 的访谈算法改写自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `grilling`（MIT）。
 
 ## 流程总览
 
@@ -119,16 +120,20 @@ version: 0.6.0
 然后**穷追不舍地访谈用户，直到双方对「要做什么」达成同一份理解**。访谈算法与活文档纪律是一件事，不是两件：
 
 1. **建 design tree、算 frontier**：把待澄清的东西建模成决策树——一个决策的答案会解锁或改写它下游的决策；**frontier（前沿）** = 所有「前置条件已定、现在就能问」的决策。
-2. **一轮把整个 frontier 一次性问完**：每题编号，并**给出你推荐的答案**。这个格式是给用户看的交互契约，原样保留：
+2. **先产出本轮问题，再走提问通道逐题问**：
+   - 在内部列出本轮 frontier：每题有标题、题干、2–5 个互斥且可执行的选项、你推荐的那一项。清单留在内部，不要先把本轮全部题目贴给用户。
+   - **提问通道**（平台无关）：当前会话工具列表里，职责为「向用户出示选项并收回选择」的那一个。按**该工具自己的 schema** 填——题干、选项（短 label + 一句取舍说明）、推荐项。一次调用只带一题，即使工具支持一次多题；阻塞直到收到答案，再问下一题。没有这类工具时，用纯文本降级，仍一次只发一题：
 
-   ```
-   ❓ **Q1** - **<问题标题>**：<问题正文>
-   ➡️ <你推荐的答案>
-   ```
+     ```
+     ❓ **Q<n>** - **<问题标题>**：<问题正文>
+     选项：A … / B … / C …
+     ➡️ <你推荐的答案>
+     ```
 
+   - 同一 frontier 内的题互不前置，仍逐题问——用户一次只面对一个选择。某题答案让本轮剩余问题作废则跳过。
 3. **查证事实是你的活，永远不是用户的活**：现有实现长什么样、某接口有没有被别处依赖、仓库既有约定是什么——**派子代理去 grep / 读代码**，只把真正需要人拍板的取舍留给用户。
-4. **用户答完当场回写 intent.md**，不攒到最后补记：已定的裁决追加进 `## 裁决记录` 编号列表（`I-1` / `I-2` …，spec 需求表「来源」列会引用这些编号）；被答案推翻的问题陈述 / 期望结果 / 影响范围 / 约束**原地改写**，不在文末堆「修订说明」——过程留痕交给 git 与 progress.md；这一轮还答不了的进 `## 未决问题` 的 `- [ ]`。
-5. **重算 frontier 开下一轮；frontier 为空即访谈结束**——这与门禁的 `I-openq`（`## 未决问题` 无未勾选 `- [ ]`）**是同一件事的两种说法**，门禁是「访谈是否真收敛」的机器判据。收敛后 `## 未决问题` 写成一行 `- 无`。
+4. **每题答完当场回写 intent.md**，不攒到本轮结束：已定的裁决追加进 `## 裁决记录` 编号列表（`I-1` / `I-2` …，spec 需求表「来源」列会引用这些编号）；被答案推翻的问题陈述 / 期望结果 / 影响范围 / 约束**原地改写**，不在文末堆「修订说明」——过程留痕交给 git 与 progress.md；这一轮还答不了的进 `## 未决问题` 的 `- [ ]`。
+5. **本轮 frontier 问完（或被塌缩）后重算 frontier 开下一轮；frontier 为空即访谈结束**——这与门禁的 `I-openq`（`## 未决问题` 无未勾选 `- [ ]`）**是同一件事的两种说法**，门禁是「访谈是否真收敛」的机器判据。收敛后 `## 未决问题` 写成一行 `- 无`。
 
 覆盖面：所有会影响**架构边界、写入范围、验收标准、凭据/人工输入、执行深度**的问题都要有裁决。
 
@@ -181,7 +186,7 @@ version: 0.6.0
 <path-to-skill>/scripts/devloop gate plan --file .devloop/<id>/plan.md --spec .devloop/<id>/spec.md
 ```
 
-门禁全绿后**必须问用户确认是否进入 loop**，并把结论写进 `## 确认记录`：确认人 / 确认时间 / 确认范围 / 允许的 `--impl` 与 `--reviewer`（可写「按默认配对」）/ `--host`（可写「自动探测」）/ 权限授权 / `source_worktree` / `base_sha` / `plan_sha256` / control-plane 策略 / 进入 loop 结论。
+门禁全绿后**必须用提问通道问用户确认是否进入 loop**，并把结论写进 `## 确认记录`：确认人 / 确认时间 / 确认范围 / 允许的 `--impl` 与 `--reviewer`（可写「按默认配对」）/ `--host`（可写「自动探测」）/ 权限授权 / `source_worktree` / `base_sha` / `plan_sha256` / control-plane 策略 / 进入 loop 结论。
 
 **沉默、默认假设、模型自行判断都不算确认。** 没有确认记录不得创建 runner。
 
@@ -191,7 +196,7 @@ grill 可以先在当前 checkout 写 `.devloop/<id>/`，但进入执行 worktre
 
 1. 在已确认 plan 中记录 `source_worktree`、执行区锁定的 `base_sha` 与原文件的 `plan_sha256`。
 2. 创建目标 worktree 后，由协调者用 `cp -a <source>/.devloop/<id> <target>/.devloop/` 或等价 `rsync` 迁入；重新计算并核对 `plan_sha256`，不一致即暂停。
-3. 若实现依赖 source checkout 的 dirty、未提交业务改动，暂停让用户明确选择：先 commit、生成 patch 并显式导入，或改用当前 checkout。禁止静默丢弃、猜测性复制或从错误 base 启动。
+3. 若实现依赖 source checkout 的 dirty、未提交业务改动，暂停并用提问通道让用户明确选择：先 commit、生成 patch 并显式导入，或改用当前 checkout。禁止静默丢弃、猜测性复制或从错误 base 启动。
 4. `.devloop/` 是 control-plane；默认建议与 feature 分支一起 commit，使 intent/spec/plan/report/acceptance 可审计。若 plan 选择不提交，则必须列出每片允许的 control-plane dirty path，impl 暂存只用路径 allowlist，避免无边界 `git add -A`。
 5. 收尾先确认 `.devloop/` 已随分支提交或另行归档并记录位置；只有得到用户对归档与清理的确认后，才允许 `worktree rm`。
 
@@ -266,7 +271,7 @@ host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调�
   - `ORCA automations create --name devloop-<id>-sentinel --trigger "<避开整点的 10 分钟 cron>" --workspace active --reuse-session --prompt "<tick prompt>" --json`
   - `--reuse-session` 打回当前协调者会话；`--provider` 以 `ORCA automations create --help` 为准，不要另开第二个协调者。
   - 把 automation id 写入 progress / plan 确认记录。
-- **`ask`**：不支持间隔 `/loop`，也不在 Orca。告诉用户当前协调者不能用间隔 `/loop` 当哨兵，请选：本机 cronjob / launchd，或换 claude-code / codex / grok 再进 loop。未选之前 progress 记 `paused(待选哨兵调度)`，不创建 cron、不点火。
+- **`ask`**：不支持间隔 `/loop`，也不在 Orca。用提问通道告诉用户当前协调者不能用间隔 `/loop` 当哨兵，请选：本机 cronjob / launchd，或换 claude-code / codex / grok 再进 loop。未选之前 progress 记 `paused(待选哨兵调度)`，不创建 cron、不点火。
 - 用户已书面选定后才用 `--force loop|cron|orca-automation`。`--force loop` 在 `loop_supported=0` 时仍会 `ask`。
 
 ### 隔离执行区
@@ -404,9 +409,9 @@ goal / 验收 prompt 内容与 host 无关——产物自包含。
 
 解析规则：
 
-1. 用户显式 `--reviewer=X`：用 X；若 `X == impl`，**警告**并请用户明确授权；未授权不得启动同工具验收。
+1. 用户显式 `--reviewer=X`：用 X；若 `X == impl`，**警告**并用提问通道请用户明确授权；未授权不得启动同工具验收。
 2. 用户未指定：按上表选与 impl 不同的工具。
-3. 候选均不可用或只剩一个工具：告知用户并询问是否授权同工具；**不得**静默同工具验收。
+3. 候选均不可用或只剩一个工具：告知用户并用提问通道询问是否授权同工具；**不得**静默同工具验收。
 4. 将最终 `host` / `impl` / `reviewer` 写入 plan 确认记录与 progress。
 
 ### 小周期 3：跨工具对抗验收（reviewer）
@@ -488,6 +493,7 @@ reviewer 只写验收报告与（可选）只读复跑门禁；**不改业务代
 | 报告含 BLOCKED | 语义歧义 / 门禁不过 / 缺凭据 | 读报告定位：可自决的编修复 goal，需人工的置 paused 通知 |
 | goal 里出现 plan 没有的需求 | goal 编译越界 | 作废该 goal 重编译；越界内容若确实必要，回阶段 2/3 走门禁 |
 | 访谈发散、收不了尾 | frontier 没建对，问题没按依赖分层 | 回去补 design tree；未决问题逐条裁决，或降级写进「非目标」 |
+| 把整轮 frontier 写成一段 markdown / 一次工具调用塞多题 | 没用提问通道，或沿用了 grilling 的一轮问完 | 先内部产出问题，再一次一题；答完回写再问下一题 |
 | 验收被主会话直接放行 | 未启动跨工具 reviewer | 补写 acceptance-prompt 并按 host 启动 reviewer；同工具须用户书面确认 |
 | reviewer CLI / agent 不存在 | 配对候选均未安装 | 告知缺失；不得静默同工具 |
 | 探测到 Orca 但 worktree/terminal 失败 | CLI 旧 / app 未就绪 | `ORCA open` + `skills get orca-cli`；重跑 `detect-host`，失败则 tmux |

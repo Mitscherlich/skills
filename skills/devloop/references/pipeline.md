@@ -55,7 +55,7 @@ ISHA=$(devloop gate intent --file .devloop/<id>/intent.md | sed -n 's/^sha256=//
 3. 还没想清楚的问题写进 `## 未决问题` 的 `- [ ]` 列表。**未勾选的条目会挡住门禁**，这是 grill 是否收敛的机器判据。
 4. 收敛后 `## 未决问题` 写成一行 `- 无`。
 
-访谈算法（design tree / frontier / 逐轮提问）内联在 `SKILL.md` 阶段 1，无外部 skill 依赖。
+访谈算法（design tree / frontier / 提问通道逐题问）内联在 `SKILL.md` 阶段 1，无外部 skill 依赖。
 覆盖面：所有会影响**架构边界、写入范围、验收标准、凭据/人工输入、执行深度**的问题都要有裁决。
 
 收敛判据只有一个：访谈侧的「frontier 为空即结束」与门禁侧的 `I-openq`（未决问题无未勾选项）**是同一件事的两种说法**——门禁就是访谈是否真收敛的机器判据。
