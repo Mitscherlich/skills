@@ -106,4 +106,9 @@ if [ -f "$progress" ]; then
   printf '```\n'
 fi
 
+if [ -f "$devloop_dir/closeout.md" ]; then
+  printf '\n## 收尾清单\n\n%s\n' "$devloop_dir/closeout.md"
+  printf '知识去向、未验证项、发布状态和下一轮候选见该清单；此摘要不证明验收完成。\n'
+fi
+
 exit 0

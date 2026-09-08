@@ -5,7 +5,7 @@
 #   init.sh --id <id> [--title T] [--root DIR] [--stage S] [--force]
 #
 # 默认（不带 --stage）：创建 <root>/<id>/{run/}，落盘 intent.md + progress.md
-# --stage intent|spec|plan|next-goal|progress：只落盘该阶段模板
+# --stage intent|spec|plan|next-goal|progress|closeout：只落盘该阶段模板
 #
 # 模板中 {{id}} / {{title}} / {{created}} 会被替换；其余 {{...}} 保留为待填标记，
 # 由 `devloop gate <stage>` 强制填完才放行。
@@ -18,7 +18,7 @@ ROOT_SKILL=$(dl_skill_root "$HERE/init.sh")
 
 usage() {
   cat <<'EOF'
-Usage: init.sh --id <id> [--title T] [--root DIR] [--stage intent|spec|plan|next-goal|progress] [--force]
+Usage: init.sh --id <id> [--title T] [--root DIR] [--stage intent|spec|plan|next-goal|progress|closeout] [--force]
 
 Defaults: --root .devloop ; 不带 --stage 时落盘 intent.md + progress.md 并建 run/
 Exit: 0 ok / 1 refuse (exists without --force) / 2 usage
@@ -45,8 +45,9 @@ done
 
 [ -n "$id" ] || dl_die "--id required"
 case "$id" in
-  */*|*' '*|.*) dl_die "invalid --id: $id (禁止路径分隔符 / 空格 / 前导点)" ;;
+  specs|*/*|*' '*|.*) dl_die "invalid --id: $id (禁止路径分隔符 / 空格 / 前导点)" ;;
 esac
+[ "$(printf '%s' "$id$root" | tr -d '\r\n')" = "$id$root" ] || dl_die "控制面路径不能包含换行符"
 [ -n "$title" ] || title=$id
 
 created=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || dl_utc_stamp)
@@ -89,7 +90,17 @@ materialize() {
   return 0
 }
 
+# 共享过程忽略规则，不再排除整个任务目录或写入新的 Git exclude。
+sh "$HERE/gitignore.sh" "$root"
 mkdir -p "$dir"
+if tracked=$(git -C "$dir" ls-files -- . 2>/dev/null) && [ -n "$tracked" ]; then
+  dl_warn "任务过程文件已有 Git 跟踪，保留索引原状；按收尾规程单独处理"
+fi
+# 项目以控制面所在 worktree 为准，不使用调用者 cwd；非 Git 时取 root 的父目录。
+knowledge_project=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || (CDPATH= cd -- "$root/.." && pwd -P))
+if ! sh "$HERE/setup.sh" --project "$knowledge_project" --check; then
+  dl_warn "知识入口尚未就绪；请在上述 knowledge_project 运行 devloop setup。任务初始化继续，知识文件未修改。"
+fi
 printf 'dir=%s\n' "$dir"
 printf 'id=%s\n' "$id"
 printf 'created=%s\n' "$created"
@@ -97,7 +108,7 @@ printf 'created=%s\n' "$created"
 rc=0
 if [ -n "$stage" ]; then
   case "$stage" in
-    intent|spec|plan|next-goal|progress) ;;
+    intent|spec|plan|next-goal|progress|closeout) ;;
     *) dl_die "unknown --stage: $stage" ;;
   esac
   materialize "$stage" || rc=1

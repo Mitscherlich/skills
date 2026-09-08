@@ -22,7 +22,7 @@ fill() {
   sed -e 's/{{[^{}]*}}/已填内容/g' "$1"
 }
 
-for t in intent spec plan next-goal progress; do
+for t in intent spec plan next-goal progress closeout; do
   [ -f "$ROOT/templates/$t.md" ] && ok "template $t.md 存在" || not_ok "template $t.md 存在"
 done
 
@@ -61,6 +61,7 @@ SSHA=$(sh "$GATE" spec --file "$TMP/spec.md" --intent "$TMP/intent.md" | sed -n 
 
 # ── plan ──────────────────────────────────────────────────────
 fill "$D/plan.md" >"$TMP/plan.md"
+sed -i.bak 's/^- 进入 loop 结论：已填内容$/- 进入 loop 结论：通过/' "$TMP/plan.md" && rm -f "$TMP/plan.md.bak"
 sed -i.bak "s|^> spec_sha256: 已填内容\$|> spec_sha256: $SSHA|" "$TMP/plan.md" && rm -f "$TMP/plan.md.bak"
 out=$(sh "$GATE" plan --file "$TMP/plan.md" --spec "$TMP/spec.md" 2>&1)
 if printf '%s\n' "$out" | grep -q '^ok=1$'; then

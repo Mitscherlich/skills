@@ -1,0 +1,8 @@
+# devloop：只忽略任务过程材料；长期知识位于 docs/knowledge/。
+/*/intent.md
+/*/spec.md
+/*/plan.md
+/*/next-goal.md
+/*/progress.md
+/*/closeout.md
+/*/run/

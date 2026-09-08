@@ -384,6 +384,43 @@ expect_code 'unknown arg 退 2' 2 goal --file "$G" --bogus x
 expect_code '门禁未通过退 1（不是 2）' 1 goal --file "$TMP/g-nogsha.md"
 expect_code '门禁通过退 0' 0 goal --file "$G" --spec "$S" --plan "$P"
 
+# 后续问题必须明确归属；未分类和本阶段问题仍阻塞。
+sed 's/^- 无$/- [ ] [stage=spec] [owner=技术负责人] [due=设计联审前] 核对协议复用边界/' "$I" >"$TMP/i-deferred.md"
+expect_pass 'intent 允许有归属的设计问题后移' intent --file "$TMP/i-deferred.md"
+sed 's/owner=技术负责人/owner=/' "$TMP/i-deferred.md" >"$TMP/i-noowner.md"
+expect_fail '后移问题缺负责人仍阻塞' I-openq intent --file "$TMP/i-noowner.md"
+sed 's/stage=spec/stage=intent/' "$TMP/i-deferred.md" >"$TMP/i-blocking.md"
+expect_fail 'intent 本阶段问题仍阻塞' I-openq intent --file "$TMP/i-blocking.md"
+sed 's/due=设计联审前/due=/' "$TMP/i-deferred.md" >"$TMP/i-nodue.md"
+expect_fail '后移问题缺完成期限仍阻塞' I-openq intent --file "$TMP/i-nodue.md"
+
+# 草稿校验只放过签署区，仍检查内容和上游绑定；正式门禁不受影响。
+sed 's/^- 签署人：tester$/- 签署人：{{用户}}/; s/^- 结论：通过$/- 结论：{{通过或打回}}/' "$S" >"$TMP/s-draft.md"
+expect_pass '未签 spec 可以校验草稿并编译 plan' spec --draft --file "$TMP/s-draft.md" --intent "$I"
+expect_fail '草稿通过不等于正式签署' S-placeholder spec --file "$TMP/s-draft.md" --intent "$I"
+# 占位符必须放在正文，签署区允许未填写。
+sed 's/^进程内桶按 IP 分片。$/{{设计}}/' "$TMP/s-draft.md" >"$TMP/s-draft-body.md"
+expect_fail '草稿仍拦内容占位符' S-placeholder spec --draft --file "$TMP/s-draft-body.md" --intent "$I"
+expect_fail '草稿仍拦上游漂移' S-bind spec --draft --file "$TMP/s-drift.md" --intent "$I"
+expect_code 'goal 不允许 --draft 绕过点火门禁' 2 goal --draft --file "$G"
+
+sed 's/^- 进入 loop 结论：确认进入$/- 进入 loop 结论：打回/' "$P" >"$TMP/p-reject.md"
+expect_fail '拒绝进入 loop 不得通过' P-verdict plan --file "$TMP/p-reject.md" --spec "$S"
+expect_pass 'plan 草稿可先检查内容' plan --draft --file "$TMP/p-noconfirm.md" --spec "$S"
+sed '/^## 关注点与冲突/a\
+- [ ] C2：确认设计边界' "$S" >"$TMP/s-concern.md"
+expect_pass '未决关注点可进入联审草稿' spec --draft --file "$TMP/s-concern.md" --intent "$I"
+expect_fail '已填签署不能掩盖未决设计关注点' S-openq spec --file "$TMP/s-concern.md" --intent "$I"
+sed '/^| R1 | 滑动窗口计数/a\
+| R2 | 第二条需求 | make test | I-1 |' "$S" >"$TMP/s-extra.md"
+EXTRA_SHA=$(sha_file "$TMP/s-extra.md")
+write_plan "$TMP/p-uncovered.md" "$EXTRA_SHA"
+expect_fail '逐条检查需求覆盖而非仅有一行映射' P-trace-coverage plan --file "$TMP/p-uncovered.md" --spec "$TMP/s-extra.md"
+sed 's/| R1 | F1 |/| R1 | F99 |/' "$P" >"$TMP/p-phantom.md"
+expect_fail '追溯引用不存在的切片被拦' P-trace-slice plan --file "$TMP/p-phantom.md" --spec "$S"
+sed 's/| R1 | F1 | F1 实现计数器 |/| R1 |  | 曾考虑 F1 |/' "$P" >"$TMP/p-empty-mapping.md"
+expect_fail '说明列提到 F 不能代替真实映射' P-trace-coverage plan --file "$TMP/p-empty-mapping.md" --spec "$S"
+
 TOTAL=$((PASS + FAIL))
 printf '1..%s\n' "$TOTAL"
 [ "$FAIL" -eq 0 ] || exit 1

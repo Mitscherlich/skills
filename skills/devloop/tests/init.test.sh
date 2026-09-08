@@ -62,6 +62,27 @@ if sh "$INIT" --id ok1 --root "$ROOT" --stage nope >/dev/null 2>&1; then not_ok 
 sh "$INIT" --id 0002-notitle --root "$ROOT" >/dev/null 2>&1
 grep -q '0002-notitle · 0002-notitle' "$ROOT/0002-notitle/intent.md" && ok 'title 缺省回落 id' || not_ok 'title 缺省回落 id'
 
+sh "$INIT" --id 0001-demo --root "$ROOT" --stage closeout >/dev/null 2>&1
+[ -f "$D/closeout.md" ] && ok '收尾模板可单独初始化' || not_ok '收尾模板可单独初始化'
+
+# 新流程默认联审，Git 默认排除运行记录；重复 init 不改写 exclude。
+grep -qx 'review_mode: joint' "$D/intent.md" && ok '默认 joint 联审' || not_ok '默认 joint 联审'
+git init -q "$TMP/repo"
+sh "$INIT" --id 0003-git --root "$TMP/repo/.devloop" >/dev/null 2>&1
+git -C "$TMP/repo" check-ignore -q .devloop/0003-git/intent.md && ok '新控制面默认 Git ignored' || not_ok '新控制面默认 Git ignored'
+cp "$TMP/repo/.git/info/exclude" "$TMP/exclude.before"
+sh "$INIT" --id 0003-git --root "$TMP/repo/.devloop" --stage spec >/dev/null 2>&1
+cmp -s "$TMP/exclude.before" "$TMP/repo/.git/info/exclude" && ok 'exclude 幂等' || not_ok 'exclude 幂等'
+[ "$(git -C "$TMP/repo" ls-files --others --exclude-standard)" = '.devloop/.gitignore' ] && ok '只产生可提交的过程忽略规则' || not_ok '只产生可提交的过程忽略规则'
+# 路径含 Git glob 元字符必须字面排除，不能顺带隐藏相似名字。
+sh "$INIT" --id 'task[1]' --root "$TMP/repo/.devloop" >/dev/null 2>&1
+git -C "$TMP/repo" check-ignore -q '.devloop/task[1]/intent.md' && ok '排除路径中的 glob 按字面处理' || not_ok '排除路径中的 glob 按字面处理'
+git -C "$TMP/repo" check-ignore -q '.devloop/task1/deliverable.txt' && not_ok '不会排除非过程产物' || ok '不会排除非过程产物'
+cp "$TMP/repo/.git/info/exclude" "$TMP/exclude.safe"
+bad_id=$(printf 'bad\nrule')
+sh "$INIT" --id "$bad_id" --root "$TMP/repo/.devloop" >/dev/null 2>&1 && not_ok '拒绝 exclude 换行注入' || ok '拒绝 exclude 换行注入'
+cmp -s "$TMP/exclude.safe" "$TMP/repo/.git/info/exclude" && ok '拒绝后 exclude 未改动' || not_ok '拒绝后 exclude 未改动'
+
 TOTAL=$((PASS + FAIL))
 printf '1..%s\n' "$TOTAL"
 [ "$FAIL" -eq 0 ] || exit 1

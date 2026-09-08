@@ -14,14 +14,23 @@
 
 ## 需求追溯
 
-> 证明 spec 的每条 `R<n>` 都被至少一个切片覆盖。门禁要求：至少一行 `R<n> → F<n>`；理想是每条 R 都在表内。
+> 证明 spec 的每条 `R<n>` 都被至少一个切片覆盖。门禁逐条检查 spec 的 R 已覆盖，且所引 F 确实存在。
 
 | 需求 | 覆盖切片 | 说明 |
 |---|---|---|
 | R1 | F1 | {{该切片如何满足 R1}} |
 
+## 执行前置条件
+
+{{逐项承接 intent 的 Q ID：负责人、解决证据、阻塞切片或发布动作；无则写无。编 goal 前核验，未满足的依赖切片 paused。}}
+
+## 相关项目知识
+
+{{从 docs/knowledge/index.md 按本轮范围选择：项目相对文件路径、适用切片、读取用途及相关版本/commit；无相关资料则说明已查范围。goal 和 reviewer prompt 都带入本片相关路径与约束。}}
+
 ## 确认记录（进入 loop 前必填）
 
+- 确认来源：{{实际用户消息或外部批准 ID；joint 同时覆盖 spec 与 plan}}
 - 确认人：{{用户 / 责任人}}
 - 确认时间：{{ISO 时间}}
 - 确认范围：{{本 plan 覆盖哪些切片，哪些暂停}}
@@ -37,9 +46,12 @@
 - 同工具验收授权：{{无 —— 或粘贴用户明确授权原文及原因；「只剩一个工具」本身不构成授权}}
 - source_worktree：{{grill 产出所在 checkout 绝对路径}}
 - base_sha：{{执行 worktree 锁定的起点 SHA}}
-- plan_sha256：{{迁移前后核对一致的 SHA-256}}
-- control-plane 策略：{{`.devloop/` 随 feature 分支 commit（推荐）/ 外部归档；列出每片允许的 dirty path 与暂存 allowlist，禁止无边界 git add -A}}
-- 进入 loop 结论：{{用户明确确认的原文或摘要}}
+- plan hash 记录位置：{{progress 中的交接记录；整份 plan 的 hash 不写回自身}}
+- control-plane 策略：`.devloop/.gitignore` 只忽略任务过程材料；`docs/knowledge/specs/` 和知识文件纳入 Git。提交只暂存 allowlist。
+- 知识回写范围：{{项目既有领域/设计/规范文档 allowlist；不写个人全局 memory}}
+- 规格归位与清理：{{docs/knowledge/specs/<capability>/spec.md 及 domain/playbooks/decisions 目标；默认保留过程文件，清理需明确授权}}
+- 发布与下一轮：{{默认仅准备发布交接和候选；如已有执行预授权，记录类别/路径/预算或轮次/停止条件与来源}}
+- 进入 loop 结论：{{通过 / 确认进入 / 同意进入；原话留在确认来源}}
 
 ## 切片 roadmap
 
@@ -59,13 +71,4 @@
 
 ## loop 小周期协议
 
-1. 检查确认记录齐全且当前恰好一个 `open` 片；否则回到 plan 编译或暂停。
-2. 执行 `.devloop` lifecycle 交接：从 `source_worktree` 用 `cp -a` / `rsync` 迁入执行区并核对 `plan_sha256`；依赖 dirty 业务改动时暂停，让用户选择先 commit / patch 导入 / 改用当前 checkout。执行区设置 `git config remote.origin.pushurl no_push`。
-3. 解析 host：执行 `devloop detect-host`（用户指定加 `--force`，仅偏好加 `--prefer`），采用 stdout 的 `host=` / `orca_cli=`；勿手推。`--force tmux` 不得调用 Orca。
-4. 解析哨兵调度：执行 `devloop detect-scheduler`。`loop` 用 `/loop`；`orca-automation` 自动建 Orca automation 并告知用户；`ask` 才停下来让用户选。未选不得点火。
-5. re-open 或重新点火前，先把旧 report/acceptance 归档到 `run/archive/<旧 attempt_id>/`；生成新 `attempt_id`，再按 `templates/next-goal.md` 编译 next-goal.md。编译子代理只写 goal，不改代码。
-6. 按 host 点火 **impl**（tmux session / Orca terminal 命名 `devloop-{{id}}-<slice>`）。每 tick 用 `devloop lock acquire` 抢阶段锁；哨兵按 attempt/hash/mtime/HEAD 核验，不得只看固定路径存在。host=orca 时每 tick 跑 `devloop cleanup-sessions`。主会话不得内联实现业务代码。
-7. impl 完成后冻结 impl，记录待验 HEAD，写 acceptance-prompt；启动**与 impl 不同的 reviewer**（同一 worktree）。同工具验收须用户明确授权。reviewer 只写 acceptance / 只读复跑门禁；acceptance 外新增 diff 即 `BLOCKED`。
-8. acceptance 合法且当前 HEAD 等于 reviewed `head_sha`、结论 `全部完成` → 本片置 `done (commit, 数字)`；有 pending 片则下一片置 `open`。
-9. 结论 `未完成` → 保持 `open`，归档本轮产物后编译修复 goal；`BLOCKED` → 置 `paused(原因)` 并通知用户。
-10. 全部 `done` → 最终汇总、删哨兵、host=orca 再清一次 session、按 control-plane 策略提交 / 归档 `.devloop/`；确认归档并获用户授权后才允许 `worktree rm`。
+进入执行或恢复时读技能的 `references/loop.md`；全切片 done 后按 `references/closeout.md` 核对验收、将规格和知识归位、准备发布交接与候选。执行区交接需显式复制任务过程材料并核对 progress 记录的 plan hash，同时核对持久规格/知识版本。

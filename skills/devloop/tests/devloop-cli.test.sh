@@ -16,10 +16,17 @@ not_ok() { FAIL=$((FAIL + 1)); printf 'not ok %s - %s\n' "$((PASS + FAIL))" "$1"
 if sh -n "$DL"; then ok 'sh -n devloop'; else not_ok 'sh -n devloop'; fi
 
 ver=$(sh "$DL" version)
-[ "$ver" = "0.6.0" ] && ok 'version 0.6.0' || not_ok 'version 0.6.0'
+[ "$ver" = "0.9.1" ] && ok 'version 0.9.1' || not_ok 'version 0.9.1'
 
 if sh "$DL" help >/dev/null; then ok 'help exits 0'; else not_ok 'help exits 0'; fi
 
+sh "$DL" archive --dir "$TMP" --output "$TMP/old.tar.gz" >"$TMP/archive.out" 2>&1
+archive_rc=$?
+if [ "$archive_rc" -eq 2 ] && [ ! -e "$TMP/old.tar.gz" ] && grep -q '整包归档命令已移除' "$TMP/archive.out"; then
+  ok '旧整包命令只提示迁移，不再写归档'
+else
+  not_ok '旧整包命令只提示迁移，不再写归档'
+fi
 
 if sh "$DL" detect-scheduler --coordinator grok >/dev/null; then
   ok 'detect-scheduler via devloop'

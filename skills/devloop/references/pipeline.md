@@ -1,175 +1,81 @@
-# devloop 交付管线：intent → spec → plan → loop
+# devloop 管线与签署契约（0.7）
 
-> 结构参考 Anthropic《The AI-native SDLC playbook》的 Plan / Design / Build / Test / Deploy 分层：
-> 每一阶段产出**一份命名产物**，每一次阶段跃迁都有**一道准出门禁（人 + lint）**。
-> devloop 的差异化在于：门禁不是 prose 提醒，而是 `devloop gate <stage>` 的退出码；
-> 且 Test / Deploy 两层被压缩成 loop 内的「impl 门禁 + 跨工具对抗验收」。
+阶段产物仍为 intent → spec → plan → goal。**joint 合并人的 spec/plan 审阅时点，保留各自正式门禁。** `review_mode: joint` 写在新 intent 头部；`separate` 或旧文件无字段时逐阶段签署。
 
-## 总览
+## 问题何时解决
 
-| # | 阶段 | 产物 | 谁写 | 准出门禁 | 通过后 |
-|---|---|---|---|---|---|
-| 1 | grill / 意图识别 | `intent.md` | grill 主会话（活文档，边聊边回写） | `devloop gate intent` + **人工审阅签字** | 编译 spec |
-| 2 | 设计 | `spec.md` | 编译子代理（消除过程性记录） | `devloop gate spec --intent` + **签署** | 编译 plan |
-| 3 | 规划 | `plan.md` | 编译子代理（切片 roadmap） | `devloop gate plan --spec` + **确认记录** | 进入 loop |
-| 4 | 实现 loop | `next-goal.md` + `run/*` | goal 编译子代理 + impl runner | `devloop gate goal` + 跨工具 reviewer acceptance | 推进下一片 / 收尾 |
+| 类型 | 责任与出口 |
+|---|---|
+| 目标、范围、成功标准、硬约束冲突 | intent 裁决；本阶段阻塞 |
+| 仓库实现、接口与依赖事实 | Agent 查证；不能让用户猜事实 |
+| 可逆技术方案、设计风险 | spec 展示推荐与证据，联审解决 |
+| 执行环境、凭据、切片依赖 | plan 记录负责人、完成条件和被阻塞切片；依赖满足前不点火 |
+| 发布授权、环境、观察窗口 | plan 标明发布前置条件，收尾准备发布交接 |
 
-阶段跃迁的合法性由状态机保证：
+intent 的 `## 未决问题`：未分类的 `- [ ]` 一律阻塞。后续事项使用精确格式：
 
-```bash
-devloop stage can --from intent --to spec    # 0 允许
-devloop stage can --from intent --to plan    # 1 拒绝——不能跳过 spec
-devloop stage transitions --from plan        # loop / spec（打回）
+```markdown
+- [ ] [stage=spec] [owner=技术负责人] [due=设计联审前] Q1：核对协议复用边界与验收方式
+- [ ] [stage=impl] [owner=环境负责人] [due=F3 点火前] Q2：真实 E2E 凭据可用，否则 F3 paused
 ```
 
-任何时候问「现在该干什么」，用一条命令，不要重读全文：
+stage 只接受 spec / plan / impl / release；owner 和 due 均非空。due 说明具体门禁或切片，不写含糊的「以后」。业务红线不能通过标记后移规避；这需要语义审阅，CLI 不自动分类。
 
-```bash
-devloop next --dir .devloop/<id>
-```
+编译 spec 时逐项引用 Q ID：解决结果进入设计/关注点，后续条件明确转入 plan。进入 loop 前审阅 Q→结果/阻塞切片的完整覆盖。已由用户裁决的非目标也有价值，但不能为了过门禁把原承诺降级。
 
-它会依次跑三道门禁，返回 `stage=` 与 `action=`（`init_intent` / `grill_intent` / `compile_spec` / `fix_spec` / `compile_plan` / `fix_plan` / `work_open_slice` / `finalize` …），门禁不过时把每条 `fail=` 原样带出来。
+## 门禁和下一步
 
-## 防漂移：上游 sha 绑定
-
-`spec.md` 头部写 `intent_sha256:`，`plan.md` 头部写 `spec_sha256:`，值取自上游门禁通过时输出的 `sha256=`。
-门禁会重算上游文件的 SHA-256 并比对：**上游被改过而下游没重编译，门禁直接失败**。
-
-这条约束的意义：grill 结束后又追加了一条裁决，spec 却还是旧的——这种沉默漂移在纯 prose 流程里根本发现不了。
-
-`next-goal.md` 头部的 `SPEC_SHA256` / `PLAN_SHA256` 把链条延到第四级：spec 或 plan 在 loop 中被改过而 goal 没重编译，`gate goal` 直接拦下。
-
-```bash
-ISHA=$(devloop gate intent --file .devloop/<id>/intent.md | sed -n 's/^sha256=//p')
-# 把 $ISHA 写进 spec.md 的 intent_sha256 行
-```
-
-## 阶段 1：grill → intent.md
-
-`devloop init --id <id> --title <标题>` 先落盘 `intent.md` 骨架与 `progress.md`，**然后**才开始 grill。
-
-活文档纪律（这是本阶段唯一容易翻车的地方）：
-
-1. **每个裁决点一解决就回写**，追加到 `## 裁决记录` 的编号列表，不要攒到最后补记。编号在下游被引用为 `I-<n>`。
-2. 问题陈述 / 期望结果 / 影响范围 / 约束在 grill 过程中被修正时，**原地改写**，不要在文末堆「修订说明」——过程留痕交给 git 和 `progress.md`。
-3. 还没想清楚的问题写进 `## 未决问题` 的 `- [ ]` 列表。**未勾选的条目会挡住门禁**，这是 grill 是否收敛的机器判据。
-4. 收敛后 `## 未决问题` 写成一行 `- 无`。
-
-访谈算法（design tree / frontier / 提问通道逐题问）内联在 `SKILL.md` 阶段 1，无外部 skill 依赖。
-覆盖面：所有会影响**架构边界、写入范围、验收标准、凭据/人工输入、执行深度**的问题都要有裁决。
-
-收敛判据只有一个：访谈侧的「frontier 为空即结束」与门禁侧的 `I-openq`（未决问题无未勾选项）**是同一件事的两种说法**——门禁就是访谈是否真收敛的机器判据。
-
-### 门禁 A：`devloop gate intent`
-
-| 检查 | 判据 |
+| 命令 | 核对范围 |
 |---|---|
-| `I-heading` | 七个必备小节齐全 |
-| `I-placeholder` | 无 `{{...}}` 未填占位符 |
-| `I-todo` | 无 TODO / TBD / FIXME / XXX / 待填 / 待补 / 待定 |
-| `I-decision` | `## 裁决记录` 至少一条编号裁决 |
-| `I-openq` | `## 未决问题` 无未勾选 `- [ ]` |
-| `I-signer` / `I-verdict` | `## 人工审阅` 有审阅人且结论为「通过」 |
+| `gate intent` | 核心小节、无内容占位符、编号决定、本阶段无阻塞、后移问题有归属、人工审阅 |
+| `gate spec --intent ...` | R 表、设计、无问答历史、关注点已裁决、签署、上游 hash |
+| `gate plan --spec ...` | roadmap、逐条 R 覆盖、引用的 F 存在、状态、执行确认、上游 hash |
+| `gate goal --spec ... --plan ...` | 七字段、header、自 hash、上游绑定；保持原点火契约 |
 
-`I-signer` / `I-verdict` 是**人的门禁**：模型不得代签。审阅人要真的读过 intent 全文——这正是 playbook 里「product owner reviews and approves」的落点。审阅结论为「打回」时回到 grill，不得往下走。
+前三个命令可加 `--draft`：只豁免签署区占位符和签署校验；spec 草稿可保留需联审解决的关注点。输出 `mode=draft`、`approval=not_checked`，退出 0 只说明草稿结构可用于准备下一份材料。**goal 不接受 --draft。**
 
-## 阶段 2：intent.md → spec.md
+`next --dir`：
 
-编译子代理的任务是**把过程变成规格**。派活时 prompt 必须包含下面这段（改编自 playbook 的 Stage 2 设计提示词，保留其「加载组织规范 + 显式暴露策略冲突」两个要点）：
+- intent 内容未完成或被打回 → `grill_intent`；仅缺审阅 → `await_intent_review`。
+- intent 正式通过 → `compile_spec`。
+- spec 草稿内容不合格或被打回 → `fix_spec`；separate 缺签署 → `await_spec_review`；joint 草稿合格 → `compile_plan`。
+- plan 草稿不合格或被打回 → `fix_plan`；仅缺签署 → `await_design_review`（joint）或 `await_plan_review`（separate）。
+- 三份正式通过 → 切片动作；全部 done → `finalize`。finalize 是收尾请求，不能证明验收证据齐备。
 
-> 读取 `<绝对路径>/.devloop/<id>/intent.md`，产出一份把它接入现有代码库的**需求与设计规格**。
-> 应用你可用的项目规范（CLAUDE.md / AGENTS.md / 编码规范 / 安全策略 / UX 标准 / 既有 ADR），使规格符合这些约束。
-> 完整写入 `<绝对路径>/.devloop/<id>/spec.md`，达到可直接交付给实现方的程度。
-> **明确写出任何关注点，尤其是你无法同时满足相互冲突的策略的地方**——写进「关注点与冲突」表，给出建议取舍和需要谁拍板，不要私自选一个然后掩盖。
-> 结构按 `<skill>/templates/spec.md`。头部 `intent_sha256:` 填 `<门禁输出的 sha256>`。
-> **消除过程性记录**：不得出现裁决历史、未决问题、问答轮次、grill 对话痕迹；intent 的裁决只以 `I-<n>` 形式出现在需求表的「来源」列。
-> 只写 spec.md，不改任何业务代码，不提交。
+## 编译 spec
 
-产物纪律：
+编译者读取已确认 intent、当前仓库与 AGENTS/CLAUDE/领域规范，写 `templates/spec.md`：
 
-- 每条需求一个稳定 ID `R<n>`，四列（需求 / 验收标准 / 来源）都不能空。**验收标准必须可执行**——可跑的命令、可 grep 的断言、可观测的指标，不能是「体验更好」。
-- `## 关注点与冲突` 宁可写「无」，也不要漏掉真实冲突。这是本阶段对下游最有价值的输出。
+1. 每条 R 有可执行或可观察的验收标准和 I 来源，需求保留稳定 ID。
+2. 设计只写当前选择，保留关键理由；问答历史留 progress。当前决定改变后，同步 intent 正文和引用它的内容，不能只在尾部追加相反裁决。
+3. 技术深化若未改变目标/硬边界，留在 spec；改变业务承诺或允许写入范围才回 intent 做增量裁决。
+4. `## 关注点与冲突` 中尚需用户选择的内容用 `- [ ] C1：...`；解决后改为 `- [x] C1：决定及理由`。正式 gate 拦截此处未勾选项。表格中也只保留已生效选择。
+5. 记录 `intent_sha256`，只写 spec，不改业务代码或代签。
 
-### 门禁 B：`devloop gate spec --intent <intent.md>`
+## 编译 plan
 
-| 检查 | 判据 |
-|---|---|
-| `S-heading` / `S-placeholder` / `S-todo` | 同 A 的结构与占位符检查 |
-| `S-req` / `S-req-cell` | 至少一行 `\| R<n> \|`，且每行描述/验收标准/来源三列非空 |
-| `S-procedural` | 不得残留 `## 裁决记录` / `## 未决问题` / `## 对话记录` / `## 过程记录` / `## 人工审阅` |
-| `S-procedural-line` | 不得残留 `Q:` `A:` `问：` `答：` / `第 N 轮` / `grill 记录` |
-| `S-signer` / `S-verdict` | `## 签署记录` 有签署人且结论为「通过」 |
-| `S-bind` | `intent_sha256` 与当前 intent.md 一致（无漂移） |
+用 `templates/plan.md`，输入为 spec、intent 后续事项和现状代码：
 
-`S-procedural*` 就是用户要求的「消除过程性的记录」的机器判据：spec 里出现问答体或裁决历史，一律不放行。
+- 给每条 R 映射 F；按一次独立 runner 可交付且可验证的切片拆分。依赖单向、每次至多一个 open。
+- 优先安排最薄的真实链路，早暴露接口/环境约束；有凭据前置的切片明确 paused，其余独立切片可继续。保留最终整体验证。
+- 后续问题进入「执行前置条件」，每项标 Q ID、负责人、满足证据和阻塞切片/发布动作。主会话编 goal 前核验。
+- 按 [知识维护协议](knowledge.md) 填「相关项目知识」；编译 spec 时同样按索引读取本轮适用资料。
+- 确认记录包含范围、host/impl/reviewer、权限、source worktree/base、控制面与规格/知识归位范围、清理边界。能探测的选项自动填写；权限例外由真实授权支持。
+- 切片状态为 open / pending / done (...) / paused(...)。plan 是切片状态唯一事实源，goal 不推进它。
 
-## 阶段 3：spec.md → plan.md
+## 联审和 hash 封存顺序
 
-编译子代理 prompt 要点：
+1. 先运行 intent 正式门禁、spec/plan 草稿门禁。联审摘要指向两份草稿全文，显示关键取舍、前置条件和授权范围。
+2. 在 progress 留下本次提交用户审阅的 spec/plan 原始文件 hash；将用户实际确认消息或外部审批 ID、范围和时间作为来源。没有答复不能填「通过」。明确打回时修订，不重复请求同一版本签字。
+3. 用户确认的内容不变时，先填写 spec 签署元数据，跑正式 B 得到最终 spec hash；再填写 plan 的 `spec_sha256` 和确认元数据，跑正式 C。这一步只同步签署/绑定元数据，不需要让用户再次审阅同一语义内容。
+4. 若任一业务内容变更，则展示差异、核对影响、重新取得所需确认并重编译受影响下游。禁止用直接替换 hash 掩盖内容漂移。
+5. plan 的「进入 loop 结论」使用 `通过` / `确认进入` / `同意进入`，原话放另一个来源字段。确认 plan 的自 hash 存 progress 或交接记录，**不要把整份文件的 hash 写回自身造成自引用**。
+6. 签署封存后按 [知识维护协议](knowledge.md) 将定稿需求合并到 `docs/knowledge/specs/`，保留本轮签署原件和绑定；需求定稿与实现验收分开记录。执行前再次运行三个正式门禁、核对真实授权及前置条件，再按 [loop.md](loop.md) 点火。签署文本不是身份认证，CLI 的通过不替代语义和授权核验。
 
-> 读取 `<绝对路径>/.devloop/<id>/spec.md`，产出**整体方案执行计划** `<绝对路径>/.devloop/<id>/plan.md`，结构按 `<skill>/templates/plan.md`。
-> 把 spec 的每条 `R<n>` 拆进切片 roadmap，并在「需求追溯」表里给出 `R<n> → F<n>` 映射——**每条 R 都必须被至少一个切片覆盖**。
-> 切片粒度：一片 ≈ 一次无人值守 session 能完成的量（经验值 15–60 分钟 runner 时长、一二十个文件改动）。
-> 切片间依赖**单向**（后片只依赖前片的 commit），禁止环。
-> 涉及外部凭据 / 人工输入的片放最后并标 `paused(原因)`，到达时通知用户而不是硬跑。
-> 状态词只允许 `open` / `done` / `pending` / `paused(原因)`，且**恰好一个 `open`**。
-> 头部 `spec_sha256:` 填 `<门禁输出的 sha256>`。只写 plan.md，不改业务代码，不提交。
+## Goal 与打回
 
-切片粒度自检（编译完自查一遍）：
+goal 沿用 [goal-template.md](goal-template.md)；只引用 spec/plan，逐 attempt 生成，完整复制统一 DoD。上游正文变化需要重新编译，所有报告和 acceptance 都绑定本轮 goal 与 commit。
 
-- 一片 runner 时长 15–60 分钟？超过就拆，不足 10 分钟就合。
-- 后片只依赖前片 commit？有环就重排。
-- 每片有独立可验证的 DoD？验不了说明范围没想清，回 spec。
+阶段转移仍是 intent → spec → plan → loop → done。草稿编译不是执行授权。打回使用 spec→intent、plan→spec、loop→plan、done→loop；新的业务目标创建新 ID，并记录 parent_devloop 与来源。
 
-### 门禁 C：`devloop gate plan --spec <spec.md>`
-
-| 检查 | 判据 |
-|---|---|
-| `P-heading` / `P-placeholder` / `P-todo` | 结构与占位符 |
-| `P-roadmap` / `P-open` / `P-status` | 有切片行；恰好一个 `open`（或全 done）；状态词合法 |
-| `P-trace` | 需求追溯表至少一行 `R<n> → F<n>` |
-| `P-confirm` | 确认记录含确认人 / 确认时间 / 进入 loop 结论 |
-| `P-bind` | `spec_sha256` 与当前 spec.md 一致 |
-
-确认记录还要记：host / scheduler / 协调者 / impl / reviewer / 权限授权 / source_worktree / base_sha / plan_sha256 / control-plane 策略。这些字段门禁不逐一强校验，但缺失会在 loop 里立刻扎手——按 `templates/plan.md` 填满。
-
-## 阶段 4：loop —— next-goal.md 与 plan.md 的职责边界
-
-用户最容易踩的坑是让 `next-goal.md` 和 `plan.md` 打架。规则如下，**冲突时一律以 plan.md 为准**：
-
-| 事项 | plan.md | next-goal.md |
-|---|---|---|
-| 需求集合 | 唯一来源（追溯自 spec 的 R） | 只能**引用** R 编号，不得新增需求 |
-| 切片划分与状态 | 唯一事实源 | 只读；**禁止**写入或推进状态 |
-| 统一 DoD | 定义 | 原样复制，可**追加**本片特有验收点，不得删减 |
-| 本片实现细节 | 不写 | 唯一来源（代码锚点、分阶段任务、约束、BLOCKED 条件） |
-| 生命周期 | 整个 loop 一份 | 每片每次 attempt 重新编译，旧的归档 |
-
-`next-goal.md` 是 **plan.md 某一行的展开**，不是第二份计划。它由 goal 编译子代理产出：
-
-- 「工具 goal 指令」段按 `templates/next-goal.md` 的七字段句式填：目标 / 验证 / 约束 / 边界 / 迭代策略 / 完成条件 / 暂停条件。句式已内联，**不依赖任何外部 skill**；装了 `qiaomu-goal-meta-skill` 可用它把措辞打磨得更锐利，产出原样写入该段即可。
-- goal 顶部必须写齐 `ATTEMPT_ID` / `SPEC_SHA256` / `PLAN_SHA256` / `GOAL_SHA256` / `BASE_SHA` / `HEAD_SHA`，impl report 与 reviewer acceptance 回写同一组绑定字段。
-
-### 门禁 D：`devloop gate goal --file <next-goal.md> [--spec ...] [--plan ...]`
-
-| 检查 | 判据 |
-|---|---|
-| `G-heading` / `G-placeholder` / `G-todo` | 八个必备小节齐全；无 `{{...}}`；无未完成标记 |
-| `G-header` / `G-status` | 九个 header 字段非空；`STATUS` 取值合法 |
-| `G-field` | 「工具 goal 指令」段七字段齐全且非空 |
-| `G-goalsha` | `GOAL_SHA256` 等于「删除该行后」对全文算的 SHA-256 |
-| `G-bind` | 传入 `--spec` / `--plan` 时校验对应 sha 无漂移 |
-
-`G-goalsha` 的用处是让 report 与 acceptance 能凭一个值确认「验的就是派出去的那份 goal」：goal 被中途改过，三方 hash 就对不上。
-
-若 goal 编译子代理发现「本片按 plan 写的范围做不出来」，**不得**自行改范围——在 goal 里写 `BLOCKED` 并回到阶段 3 修 plan（`devloop stage can --from loop --to plan` 是合法跃迁）。
-
-## 打回路径
-
-| 场景 | 合法跃迁 | 动作 |
-|---|---|---|
-| 人工审阅 intent 打回 | 停在 `intent` | 继续 grill，回写活文档 |
-| spec 被签署人打回 | `spec → intent` | 补裁决后重编译 spec |
-| plan 门禁不过 / 切片划不动 | `plan → spec` | 修 spec 需求或验收标准 |
-| loop 中发现规划失效 | `loop → plan` | 重编译 plan，归档当前 attempt |
-| 收尾后被打回 | `done → loop` | 重开切片 |
+访谈的 design tree / frontier 思路沿用原版对 [mattpocock/skills 的 grilling](https://github.com/mattpocock/skills)（MIT）的改写；0.7 将准出范围收窄到本阶段阻塞问题。

@@ -73,7 +73,7 @@ ORCA worktree create \
 - 若 F1 goal 已就绪，可用 `worktree create --agent <impl> --prompt <goal>` 一次性创建执行区并点火，但必须仍保持“一个 devloop 一个 worktree”、后续 reviewer/F2 复用同一 devloop worktree 的语义；goal 未就绪时先 bare create，再 `terminal create`。
 - 若 CLI 较旧不支持某些 flag：先 `worktree create --name ... --json`，再用 `terminal create`。
 - 从 create 响应抄写完整 `worktree.id`（格式 `<repoId>::<path>`），以及 path；写入 `.devloop/<id>/progress.md` 与 plan 头注释。
-- 创建后从 `source_worktree` 用 `cp -a` 或 `rsync` 迁入 `.devloop/<id>/`，核对 plan 记录的 `plan_sha256`；执行区必须从锁定的 `base_sha` 起步。
+- 创建后从 `source_worktree` 用 `cp -a` 或 `rsync` 迁入 `.devloop/<id>/`，核对 progress 交接记录中的 `plan_sha256`（旧流程沿用原记录位置）；执行区必须从锁定的 `base_sha` 起步。任务过程材料不提交，核实 `.devloop/.gitignore` 对过程文档生效；同时交接 `docs/knowledge/specs/` 与相关知识的已确认版本。
 - 若实现依赖 source checkout 的 dirty 业务改动，暂停让用户选择先 commit / patch 导入 / 改用当前 checkout，禁止静默丢失。
 - 在执行区运行 `git config remote.origin.pushurl no_push`（或等价硬禁 push）并验证；后续所有绝对路径基于该 worktree path。
 - 分支名尽量 `feat/devloop-<id>-<slug>`（Orca/checkout 若另有命名，以实际 branch 为准并记入 plan）。

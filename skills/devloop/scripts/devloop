@@ -11,9 +11,11 @@ devloop — control-plane kernel CLI
 Usage: devloop <command> [args]
 
 Commands:
+  setup [--project DIR] [--check]
+                      初始化项目知识入口；--check 只读检查
   init --id ID [--title T] [--root DIR] [--stage S]
-                      Scaffold .devloop/<id>/ from templates/
-  gate intent|spec|plan|goal --file PATH [--intent|--spec|--plan PATH]
+                      创建任务模板，并只读检查项目知识入口
+  gate intent|spec|plan|goal --file PATH [--intent|--spec|--plan PATH] [--draft]
                       Stage exit gate (lint) — 0 pass / 1 fail
   stage <validate|can|transitions> --from S [--to S]
                       Pipeline stage machine: intent|spec|plan|loop|done
@@ -30,7 +32,7 @@ Commands:
   run-tests            Run all tests/*.test.sh
   help
 
-Version: 0.6.0
+Version: 0.9.1
 EOF
 }
 
@@ -39,7 +41,9 @@ cmd=$1
 shift
 
 case "$cmd" in
+  setup) exec sh "$HERE/setup.sh" "$@" ;;
   init) exec sh "$HERE/init.sh" "$@" ;;
+  archive) printf '整包归档命令已移除；用 devloop skill 将定稿需求归入 docs/knowledge/specs，领域/经验/ADR 分别归入 domain/playbooks/decisions。\n' >&2; exit 2 ;;
   gate) exec sh "$HERE/gate.sh" "$@" ;;
   stage)
     [ $# -ge 1 ] || { printf 'error: stage needs a subcommand\n' >&2; exit 2; }
@@ -73,7 +77,7 @@ case "$cmd" in
   review-packet|review) exec sh "$HERE/review-packet.sh" "$@" ;;
   run-tests|test) exec sh "$HERE/run-tests.sh" "$@" ;;
   help|-h|--help) usage; exit 0 ;;
-  version|--version) printf '0.6.0\n'; exit 0 ;;
+  version|--version) printf '0.9.1\n'; exit 0 ;;
   *)
     printf 'error: unknown command: %s\n' "$cmd" >&2
     usage >&2

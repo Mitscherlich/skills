@@ -143,10 +143,46 @@ echo "$nd" | grep -qx 'slice_id=F1' && ok 'loop 取到 open 切片' || not_ok 'l
 
 sed 's/^- 确认人：tester$//' "$D/plan.md" >"$D/plan.bad" && mv "$D/plan.bad" "$D/plan.md"
 nd=$(sh "$NX" --dir "$D")
-echo "$nd" | grep -qx 'action=fix_plan' && ok 'plan 门禁不过 → fix_plan' || not_ok 'plan 门禁不过 → fix_plan'
+echo "$nd" | grep -qx 'action=await_plan_review' && ok '只缺确认 → await_plan_review' || not_ok '只缺确认 → await_plan_review'
 echo "$nd" | grep -qx 'stage=loop' && not_ok 'plan 不过时不得进 loop' || ok 'plan 不过时不得进 loop'
 
 if sh "$NX" >/dev/null 2>&1; then not_ok '缺 --dir/--plan 报错'; else ok '缺 --dir/--plan 报错'; fi
+
+# 新流程 joint：未签 spec 可以生成 plan，两个正式门禁仍要过。
+printf '\nreview_mode: joint\n' >>"$D/intent.md"
+ISHA=$(sh "$GATE" intent --file "$D/intent.md" | sed -n 's/^sha256=//p')
+sed "s/^> intent_sha256: .*/> intent_sha256: $ISHA/; s/^- 签署人：tester$/- 签署人：{{用户}}/; s/^- 结论：通过$/- 结论：{{通过或打回}}/" "$D/spec.md" >"$D/s.tmp"
+mv "$D/s.tmp" "$D/spec.md"
+mv "$D/plan.md" "$D/saved-plan"
+nd=$(sh "$NX" --dir "$D")
+echo "$nd" | grep -qx 'action=compile_plan' && ok 'joint 未签 spec → compile_plan' || not_ok 'joint 未签 spec → compile_plan'
+SSHA=$(sh "$GATE" spec --draft --file "$D/spec.md" --intent "$D/intent.md" | sed -n 's/^sha256=//p')
+sed "s/^> spec_sha256: .*/> spec_sha256: $SSHA/" "$D/saved-plan" >"$D/plan.md"
+nd=$(sh "$NX" --dir "$D")
+echo "$nd" | grep -qx 'action=await_design_review' && ok 'joint 两份草稿齐 → 等联审' || not_ok 'joint 两份草稿齐 → 等联审'
+echo "$nd" | grep -qx 'stage=loop' && not_ok '草稿不得进 loop' || ok '草稿不得进 loop'
+
+sed 's/^- 结论：{{通过或打回}}$/- 结论：打回/' "$D/spec.md" >"$D/s.tmp"
+mv "$D/s.tmp" "$D/spec.md"
+nd=$(sh "$NX" --dir "$D")
+echo "$nd" | grep -qx 'action=fix_spec' && ok 'spec 打回 → 修订而非重复索要签字' || not_ok 'spec 打回 → 修订而非重复索要签字'
+
+# 模拟用户实际联审后落签字；正式 spec 改 sha 后重绑 plan。
+sed 's/{{用户}}/tester/; s/^- 结论：打回$/- 结论：通过/' "$D/spec.md" >"$D/s.tmp"
+mv "$D/s.tmp" "$D/spec.md"
+SSHA=$(sh "$GATE" spec --file "$D/spec.md" --intent "$D/intent.md" | sed -n 's/^sha256=//p')
+sed "s/^> spec_sha256: .*/> spec_sha256: $SSHA/" "$D/saved-plan" >"$D/plan.md"
+printf '\n' >>"$D/plan.md"
+sed '/^## 确认记录/a\
+- 确认人：tester' "$D/plan.md" >"$D/p.tmp"
+mv "$D/p.tmp" "$D/plan.md"
+nd=$(sh "$NX" --dir "$D")
+echo "$nd" | grep -qx 'action=work_open_slice' && ok 'joint 实际签署后才进 loop' || not_ok 'joint 实际签署后才进 loop'
+
+sed 's/^- 审阅人：tester$/- 审阅人：{{用户}}/' "$D/intent.md" >"$D/i.tmp"
+mv "$D/i.tmp" "$D/intent.md"
+nd=$(sh "$NX" --dir "$D")
+echo "$nd" | grep -qx 'action=await_intent_review' && ok 'intent 只缺签署不继续 grill' || not_ok 'intent 只缺签署不继续 grill'
 
 TOTAL=$((PASS + FAIL))
 printf '1..%s\n' "$TOTAL"

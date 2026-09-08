@@ -36,6 +36,10 @@ emit_gate_failures() {
   printf '%s\n' "$1" | grep '^fail=' || true
 }
 
+rejected() {
+  grep -qE '^[-*] (结论|进入 loop 结论)[:：][[:space:]]*(打回|拒绝|不通过)' "$1"
+}
+
 # ── 管线层：--dir 模式 ────────────────────────────────────────
 if [ -n "$dir" ]; then
   [ -d "$dir" ] || dl_die "not a directory: $dir"
@@ -56,8 +60,13 @@ if [ -n "$dir" ]; then
     intent_sha=$(printf '%s\n' "$gate_out" | sed -n 's/^sha256=//p')
     printf 'intent_sha256=%s\n' "$intent_sha"
   else
-    printf 'stage=intent\naction=grill_intent\n'
-    printf 'reason=intent 准出门禁未通过——继续 grill 并回写结论\n'
+    if sh "$HERE/gate.sh" intent --draft --file "$intent" >/dev/null 2>&1 && ! rejected "$intent"; then
+      printf 'stage=intent\naction=await_intent_review\n'
+      printf 'reason=内容检查通过，仅等待用户审阅；无需继续提问\n'
+    else
+      printf 'stage=intent\naction=grill_intent\n'
+      printf 'reason=解决本阶段阻塞问题并同步当前决定\n'
+    fi
     printf 'read=%s\n' "$intent"
     emit_gate_failures "$gate_out"
     exit 0
@@ -71,29 +80,50 @@ if [ -n "$dir" ]; then
     exit 0
   fi
 
+  # 无标记的旧流程继续分开签署；新模板默认 joint。
+  review_mode=$(sed -n 's/^review_mode:[[:space:]]*//p' "$intent" | head -n 1 | tr -d '[:space:]')
+  [ -n "$review_mode" ] || review_mode=separate
+  spec_signed=1
   if gate_out=$(sh "$HERE/gate.sh" spec --file "$spec" --intent "$intent" 2>/dev/null); then
     spec_sha=$(printf '%s\n' "$gate_out" | sed -n 's/^sha256=//p')
     printf 'spec_sha256=%s\n' "$spec_sha"
   else
-    printf 'stage=spec\naction=fix_spec\n'
-    printf 'reason=spec 准出门禁未通过\n'
-    printf 'read=%s\n' "$spec"
-    emit_gate_failures "$gate_out"
-    exit 0
+    spec_signed=0
+    if ! sh "$HERE/gate.sh" spec --draft --file "$spec" --intent "$intent" >/dev/null 2>&1 || rejected "$spec"; then
+      printf 'stage=spec\naction=fix_spec\nreason=修订 spec 内容或处理打回意见\n'
+      printf 'read=%s\n' "$spec"
+      emit_gate_failures "$gate_out"
+      exit 0
+    fi
+    if [ "$review_mode" = separate ]; then
+      printf 'stage=spec\naction=await_spec_review\nreason=等待 spec 单独签署\n'
+      printf 'read=%s\n' "$spec"
+      emit_gate_failures "$gate_out"
+      exit 0
+    fi
+    printf 'spec_sha256=%s\n' "$(dl_sha256_file "$spec")"
   fi
 
   if [ ! -f "$plan" ]; then
     printf 'stage=spec\naction=compile_plan\n'
-    printf 'reason=spec 门禁已过，尚未编译 plan.md\n'
+    printf 'reason=spec 内容已检查，生成 plan 草稿；joint 模式在两份草稿齐后联审\n'
     printf 'read=%s\n' "$spec"
     printf 'write=%s\n' "$plan"
     exit 0
   fi
 
-  if ! gate_out=$(sh "$HERE/gate.sh" plan --file "$plan" --spec "$spec" 2>/dev/null); then
+  if ! sh "$HERE/gate.sh" plan --draft --file "$plan" --spec "$spec" >/dev/null 2>&1 || rejected "$plan"; then
+    gate_out=$(sh "$HERE/gate.sh" plan --file "$plan" --spec "$spec" 2>/dev/null) || true
     printf 'stage=plan\naction=fix_plan\n'
     printf 'reason=plan 准出门禁未通过——不得进入 loop\n'
     printf 'read=%s\n' "$plan"
+    emit_gate_failures "$gate_out"
+    exit 0
+  fi
+  if ! gate_out=$(sh "$HERE/gate.sh" plan --file "$plan" --spec "$spec" 2>/dev/null) || [ "$spec_signed" -eq 0 ]; then
+    if [ "$review_mode" = joint ]; then action=await_design_review; else action=await_plan_review; fi
+    printf 'stage=plan\naction=%s\nreason=等待实际审阅与执行授权；草稿检查不能授权点火\n' "$action"
+    printf 'read=%s\nread=%s\n' "$spec" "$plan"
     emit_gate_failures "$gate_out"
     exit 0
   fi
@@ -123,6 +153,7 @@ if [ "${open:-0}" -eq 0 ]; then
   printf 'action=finalize\n'
   printf 'reason=all slices done\n'
   printf 'read=%s\n' "$plan"
+  printf 'read=%s\n' "$HERE/../references/closeout.md"
   exit 0
 fi
 

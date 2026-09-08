@@ -23,6 +23,8 @@ Usage:
   gate.sh plan   --file PATH [--spec PATH]
   gate.sh goal   --file PATH [--spec PATH] [--plan PATH]
 
+  intent/spec/plan 可加 --draft：仅检查内容，忽略签署区；不能授权执行。
+
 Exit: 0 pass / 1 fail / 2 usage
 EOF
   exit 2
@@ -36,6 +38,15 @@ usage_err() {
 
 FAILN=0
 CHECKN=0
+DRAFT=0
+
+# 草稿只豁免签署区的占位符；正文仍完整检查。
+lint_content() {
+  awk -v draft="$DRAFT" '
+    /^## / { approval = ($0 ~ /^## (人工审阅|签署记录|确认记录)/) }
+    !(draft && approval) { print }
+  ' "$1"
+}
 
 pass_check() { CHECKN=$((CHECKN + 1)); }
 fail_check() {
@@ -100,8 +111,8 @@ check_headings() {
 check_placeholders() {
   _file=$1
   _prefix=$2
-  if grep -q '{{' "$_file"; then
-    _n=$(grep -c '{{' "$_file" | tr -d ' ')
+  if lint_content "$_file" | grep -q '{{'; then
+    _n=$(lint_content "$_file" | grep -c '{{' | tr -d ' ')
     fail_check "$_prefix-placeholder" "仍有 $_n 处未填占位符 {{...}}"
   else
     pass_check
@@ -112,8 +123,8 @@ check_placeholders() {
 check_todo_markers() {
   _file=$1
   _prefix=$2
-  if grep -qE 'TODO|TBD|FIXME|XXX|待填|待补|待定' "$_file"; then
-    _hit=$(grep -nE 'TODO|TBD|FIXME|XXX|待填|待补|待定' "$_file" | head -n 1)
+  if lint_content "$_file" | grep -qE 'TODO|TBD|FIXME|XXX|待填|待补|待定'; then
+    _hit=$(lint_content "$_file" | grep -nE 'TODO|TBD|FIXME|XXX|待填|待补|待定' | head -n 1)
     fail_check "$_prefix-todo" "仍有未完成标记：$_hit"
   else
     pass_check
@@ -122,6 +133,7 @@ check_todo_markers() {
 
 # 审阅/签署记录：需要 <who_key> 非空 且 结论: 通过
 check_signoff() {
+  [ "$DRAFT" -eq 0 ] || return 0
   _body=$1
   _prefix=$2
   _who_key=$3
@@ -179,13 +191,26 @@ gate_intent() {
     fail_check "I-decision" "裁决记录为空——grill 没有产出任何编号裁决"
   fi
 
-  openq=$(section_body "$file" '## 未决问题' | grep -c '^- \[ \]' || true)
+  # 只允许有负责人、期限和问题正文的后续阶段事项；未分类一律阻塞。
+  openq=$(section_body "$file" '## 未决问题' | awk '
+    /^[[:space:]]*[-*] \[ \]/ {
+      if ($0 !~ /^[[:space:]]*[-*] \[ \] \[stage=(spec|plan|impl|release)\] \[owner=[^]]+\] \[due=[^]]+\] [^[:space:]]/ ||
+          $0 ~ /\[(owner|due)=[[:space:]]*\]/) n++
+    }
+    END { print n+0 }
+  ')
   openq=$(printf '%s' "$openq" | tr -d ' ')
   if [ "${openq:-0}" -eq 0 ]; then
     pass_check
   else
-    fail_check "I-openq" "还有 $openq 条未决问题未勾选——grill 未收敛"
+    fail_check "I-openq" "还有 $openq 条本阶段或未分类问题；后续事项须注明 stage/owner/due"
   fi
+
+  review_mode=$(header_value "$file" review_mode)
+  case "$review_mode" in
+    ''|joint|separate) pass_check ;;
+    *) fail_check I-review-mode "review_mode 只允许 joint / separate" ;;
+  esac
 
   check_signoff "$(section_body "$file" '## 人工审阅')" I 审阅人
 }
@@ -237,6 +262,9 @@ gate_spec() {
   fi
 
   check_signoff "$(section_body "$file" '## 签署记录')" S 签署人
+  if [ "$DRAFT" -eq 0 ] && section_body "$file" '## 关注点与冲突' | grep -qE '^[[:space:]]*[-*] \[ \]'; then
+    fail_check S-openq "设计关注点尚未裁决；先解决再签署"
+  fi
 
   if [ -n "$intent" ]; then
     check_sha_binding "$file" intent_sha256 "$intent" S
@@ -292,15 +320,39 @@ gate_plan() {
     fail_check "P-trace" "需求追溯表没有 R<n> → F<n> 映射——无法证明 spec 需求已被切片覆盖"
   fi
 
+  if [ -n "$spec" ] && [ -f "$spec" ]; then
+    trace_body=$(section_body "$file" '## 需求追溯')
+    roadmap_body=$(section_body "$file" '## 切片 roadmap')
+    for req in $(sed -n 's/^|[[:space:]]*\(R[0-9][0-9]*\)[[:space:]]*|.*/\1/p' "$spec" | sort -u); do
+      if ! printf '%s\n' "$trace_body" | awk -F'|' -v req="$req" '
+        { id=$2; gsub(/[[:space:]]/, "", id); if (id==req && $3 ~ /F[0-9]+/) found=1 }
+        END { exit !found }
+      '; then
+        fail_check P-trace-coverage "$req 没有覆盖切片"
+      fi
+    done
+    for slice in $(printf '%s\n' "$trace_body" | awk -F'|' '/^\|[[:space:]]*R[0-9]+[[:space:]]*\|/ { print $3 }' | grep -oE 'F[0-9]+' | sort -u); do
+      if ! printf '%s\n' "$roadmap_body" | grep -qE "^\|[[:space:]]*$slice[[:space:]]*\|"; then
+        fail_check P-trace-slice "追溯引用了不存在的切片 $slice"
+      fi
+    done
+  fi
+
   confirm=$(section_body "$file" '## 确认记录')
-  for k in 确认人 确认时间 '进入 loop 结论'; do
-    v=$(field_value "$confirm" "$k")
-    if [ -n "$v" ]; then
-      pass_check
-    else
-      fail_check "P-confirm" "确认记录缺少「${k}」"
-    fi
-  done
+  if [ "$DRAFT" -eq 0 ]; then
+    for k in 确认人 确认时间 '进入 loop 结论'; do
+      v=$(field_value "$confirm" "$k")
+      if [ -n "$v" ]; then
+        pass_check
+      else
+        fail_check "P-confirm" "确认记录缺少「${k}」"
+      fi
+    done
+    case "$(field_value "$confirm" '进入 loop 结论')" in
+      通过|确认进入|同意进入) pass_check ;;
+      *) fail_check P-verdict "进入 loop 结论须为「通过」「确认进入」或「同意进入」" ;;
+    esac
+  fi
 
   if [ -n "$spec" ]; then
     check_sha_binding "$file" spec_sha256 "$spec" P
@@ -380,6 +432,7 @@ up_spec=
 up_plan=
 while [ $# -gt 0 ]; do
   case "$1" in
+    --draft) DRAFT=1; shift ;;
     --file) file=$2; shift 2 ;;
     --intent) up_intent=$2; shift 2 ;;
     --spec) up_spec=$2; shift 2 ;;
@@ -389,12 +442,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+[ "$stage" != goal ] || [ "$DRAFT" -eq 0 ] || usage_err "goal 不允许 --draft"
+
 [ -n "$file" ] || usage_err "--file required"
 [ -f "$file" ] || usage_err "file not found: $file"
 [ -s "$file" ] || usage_err "file is empty: $file"
 
 printf 'stage=%s\n' "$stage"
 printf 'file=%s\n' "$file"
+if [ "$DRAFT" -eq 1 ]; then printf 'mode=draft\napproval=not_checked\n'; else printf 'mode=full\n'; fi
 
 case "$stage" in
   intent) gate_intent "$file" ;;
