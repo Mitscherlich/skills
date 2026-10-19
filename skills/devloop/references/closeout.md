@@ -62,6 +62,8 @@
 
 停止本轮 sentinel 与已结束 session，核对没有 impl/reviewer/compiler 正在写文件，释放已确认结束的阶段锁。保留尚需人工验证的业务现场。
 
+acpus 模式先按 progress 的 Run ID/Runtime 目录核对所有批次及 worker 已结束；退出 inspect/follow 不等于停止 Run。验收证据从 `run/acpus/<F>/<attempt>/` 核对，原 Runtime 数据和子任务 worktree 的清理仍遵守下述授权及证据保留要求。
+
 核对 `docs/knowledge/specs/`、domain、playbooks、decisions 的本次产物与索引；逐项确认可进入 Git，暂存时明确列出这些文件和 `.devloop/.gitignore`。发布交接归入项目既有发布记录或 playbooks，需跨会话保留的下一轮候选进入既有 backlog；没有 backlog 时可在规格的后续事项中记录候选及处置。closeout 只保留本轮检查过程与去向。
 
 原始过程材料默认留在 `.devloop/<id>/` 并被 `.devloop/.gitignore` 中的过程规则忽略，不再整包压缩到外部目录。归位不自动删除任务目录或 worktree。明确授权清理后，先确保长期产物已提交或已保存到仍保留的 checkout，必要确认来源、验收摘要及外部证据已持久保存，再清理；否则保留现场并说明缺口。已有压缩档案保留原状，不作为新的归档机制。

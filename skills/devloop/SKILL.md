@@ -1,7 +1,7 @@
 ---
 name: devloop
 description: 当用户要用 devloop 启动交付、继续已有 .devloop/<id>、初始化或维护项目知识库、收尾归档、从上一轮选择新 intent 时使用。支持 intent 确认、spec/plan 联审、独立实现与验收，以及发布交接。
-version: 0.9.1
+version: 0.10.0
 ---
 
 # devloop：从意图到可验证交付，再把知识带入下一轮
@@ -33,6 +33,9 @@ version: 0.9.1
 <skill>/scripts/devloop setup --check
 <skill>/scripts/devloop setup
 <skill>/scripts/devloop init --id <id> --title <标题>
+<skill>/scripts/devloop init --id <id> --title <标题> --mode acpus
+<skill>/scripts/devloop doctor --mode acpus
+<skill>/scripts/devloop detect-mode --dir .devloop/<id>
 <skill>/scripts/devloop next --dir .devloop/<id>
 <skill>/scripts/devloop gate intent --draft --file .devloop/<id>/intent.md
 <skill>/scripts/devloop review-packet --devloop-dir .devloop/<id>
@@ -41,6 +44,8 @@ version: 0.9.1
 ```
 
 `next` 只读，返回 `stage/action` 和失败项。`await_*_review` 表示等待已有材料的审阅，不要继续制造问题。CLI 详细契约见 [control-plane](references/control-plane.md)。CLI 沿用 POSIX shell 和标准工具；规格语义合并按知识维护协议执行。
+
+执行后端通过 `--mode default|acpus` 显式选择，也支持 `devloop --mode acpus init ...`。新任务默认 `default`，沿用原宿主流程；`acpus` 是可选依赖，安装与兼容性检查见 [installation-acpus](references/installation-acpus.md)。模式存入 intent/plan，恢复自动沿用；旧文件无字段按 default 处理，不因检测到安装而切换，依赖缺失也不自动降级。
 
 ## 1. Intent：先写草稿，只问当前阻塞
 
@@ -61,7 +66,7 @@ version: 0.9.1
 按 [pipeline.md](references/pipeline.md) 编译与签署，模板在 `templates/`。
 
 1. spec 应用项目规范，形成 R 需求表、设计和关注点。逐项接住 intent 转交的问题：设计事项解决在 spec，执行条件进入 plan 并标明阻塞切片，发布条件进入发布交接。不要丢失原 ID。
-2. 新流程 `joint`：spec 的 `gate spec --draft --intent ...` 通过即可编译 plan 草稿。plan 包含 R→F 追溯、独立可验证的切片、统一 DoD 和执行边界。
+2. 新流程 `joint`：spec 的 `gate spec --draft --intent ...` 通过即可编译 plan 草稿。plan 包含 R→F 追溯、独立可验证的切片、统一 DoD 和执行边界。acpus 模式同时按 [执行合同](templates/plan-acpus.md) 编制当前批次内可并行的 T 子图、写入边界、验证与预算；先稳定公共契约，再并行独立模块。
 3. 两份草稿检查通过，向用户展示同一份联审摘要：目标与范围、关键设计取舍、风险、切片与验证、仍需人裁决的增量、执行及收尾授权。全文提供链接；优先处理关注点，不让用户重读没有变化的内容。
 4. 用户联审通过后，以同一真实确认来源填写 spec 签署与 plan 确认记录，按 pipeline 的顺序封存绑定。任何语义变更都展示增量并重审受影响部分；签署封存后按知识维护协议将定稿需求合并到 `docs/knowledge/specs/`，标明实现状态。正式 intent/spec/plan 全通过后才进入执行。
 5. 多人职责分离、用户要求逐阶段审阅时，将 intent 的 `review_mode` 设为 `separate`。无此字段的旧流程仍按分别签署执行；继续旧流程时不自动改模式或重置已有授权。
@@ -70,11 +75,12 @@ gate 校验结构和文件绑定，不能证明签名是谁写的，也不能判
 
 ## 3. 执行：按当前 attempt 核验
 
-进入 loop、恢复 runner、处理停滞或重开切片时，读取 [执行协议](references/loop.md)；只有确定 host=orca 时再读取 [Orca 规程](references/orca-host.md)。
+进入 loop、恢复 runner、处理停滞或重开切片时，先 `next --dir` 读取 `execution_mode`：default 读 [执行协议](references/loop.md)，确定 host=orca 时再读 [Orca 规程](references/orca-host.md)；acpus 读 [Acpus 执行协议](references/acpus-mode.md)，执行前 `doctor --mode acpus` 并读取本机 `acpus skill read`。每次只加载所选后端的执行规程。
 
 必须保留的边界：
 
-- 协调者编排，业务实现交给 host 上的 impl runner；默认与 impl 不同工具的 reviewer 独立验收。同工具验收须已有明确用户授权。
+- 协调者编排，业务实现交给所选后端的 impl runner；默认与 impl 不同工具的 reviewer 独立验收。同工具验收须已有明确用户授权。
+- default 沿用逐片执行；acpus 在当前 F 内按 T 依赖图有界并行、独立 worktree，串行集成并验收整个 F。plan 仍至多一个 open；Runtime 管子任务运行状态，不能以节点完成替代验收。
 - 每次点火生成新 attempt；goal 通过门禁 D，并绑定 spec/plan/goal/base/head。报告和 acceptance 先写临时文件再 atomic rename。
 - reviewer 只写验收报告，不改代码、不提交、不推进 plan。当前 HEAD 与 reviewed head 一致才能推进下一片。
 - goal 是 plan 某行的展开，不能新增需求。原承诺未满足留在本轮，不能改成下一轮候选来宣布完成。
@@ -96,4 +102,4 @@ gate 校验结构和文件绑定，不能证明签名是谁写的，也不能判
 
 0.6.x 的 intent/spec/plan 和验收原件仍可读取；对旧流程收尾不需要升级模板或重签历史文档。新严格检查暴露缺口时如实处理；历史自然语言确认可依据原授权规范化字段，并保存原文来源。详细迁移见收尾协议。
 
-本轮没有引入常驻监控服务或新的发布平台。通过真实新流程观察「关键问题数、重复确认数、开工后需求返工、错误完成次数」，继续调整。演进记录见 [ROADMAP.md](ROADMAP.md)。
+核心不自建常驻监控服务或发布平台；可选 acpus 模式使用外部 Runtime，按事件和检查点展示进展、失败与预算。继续通过真实流程观察「关键问题数、重复确认数、需求返工、错误完成次数、关键路径耗时与重试次数」。演进记录见 [ROADMAP.md](ROADMAP.md)。

@@ -8,7 +8,7 @@ usage() {
   cat <<'EOF'
 devloop — control-plane kernel CLI
 
-Usage: devloop <command> [args]
+Usage: devloop [--mode default|acpus] <command> [args]
 
 Commands:
   setup [--project DIR] [--check]
@@ -19,7 +19,10 @@ Commands:
                       Stage exit gate (lint) — 0 pass / 1 fail
   stage <validate|can|transitions> --from S [--to S]
                       Pipeline stage machine: intent|spec|plan|loop|done
-  doctor              Health check skill tree and tools
+  doctor [--mode default|acpus] [--acpus-cli PATH]
+                      按所选模式检查 skill 和执行环境
+  detect-mode [--mode default|acpus] [--dir DIR] [--acpus-cli PATH]
+                      检查执行模式与 Acpus 安装/接口，不自动安装或降级
   detect-host [...]   Run detect-runtime-host.sh
   detect-scheduler [...]
   cleanup-sessions --orca-cli PATH --worktree ID [opts]
@@ -32,13 +35,31 @@ Commands:
   run-tests            Run all tests/*.test.sh
   help
 
-Version: 0.9.1
+Version: 0.10.0
 EOF
 }
 
+leading_mode=
+if [ "${1:-}" = --mode ]; then
+  [ $# -ge 3 ] || { usage >&2; exit 2; }
+  leading_mode=$2
+  case "$leading_mode" in default|acpus) ;; *) printf 'error: --mode 只允许 default|acpus\n' >&2; exit 2 ;; esac
+  shift 2
+fi
 [ $# -ge 1 ] || { usage; exit 2; }
 cmd=$1
 shift
+if [ -n "$leading_mode" ]; then
+  case "$cmd" in
+    init|doctor|detect-mode|next|next-action|status|gate|review-packet|review)
+      # 拒绝重复选择；每个子命令也支持尾部 --mode。
+      for arg in "$@"; do
+        [ "$arg" != --mode ] || { printf 'error: 重复 --mode\n' >&2; exit 2; }
+      done
+      set -- "$@" --mode "$leading_mode" ;;
+    *) printf 'error: %s 不接受 --mode\n' "$cmd" >&2; exit 2 ;;
+  esac
+fi
 
 case "$cmd" in
   setup) exec sh "$HERE/setup.sh" "$@" ;;
@@ -60,6 +81,7 @@ case "$cmd" in
     esac
     ;;
   doctor) exec sh "$HERE/doctor.sh" "$@" ;;
+  detect-mode) exec sh "$HERE/detect-execution-mode.sh" "$@" ;;
   detect-host|detect-runtime-host)
     exec sh "$HERE/detect-runtime-host.sh" "$@"
     ;;
@@ -77,7 +99,7 @@ case "$cmd" in
   review-packet|review) exec sh "$HERE/review-packet.sh" "$@" ;;
   run-tests|test) exec sh "$HERE/run-tests.sh" "$@" ;;
   help|-h|--help) usage; exit 0 ;;
-  version|--version) printf '0.9.1\n'; exit 0 ;;
+  version|--version) printf '0.10.0\n'; exit 0 ;;
   *)
     printf 'error: unknown command: %s\n' "$cmd" >&2
     usage >&2

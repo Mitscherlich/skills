@@ -1,6 +1,6 @@
 # devloop · ROADMAP
 
-> 版本线：0.4.0 → 0.5.x（control-plane kernel）→ 0.6.x（阶段门禁）→ 0.7.0（澄清减负、联审与知识收尾）→ 0.8.0（项目知识入口与维护）→ **0.9.1（规格统一到项目知识库）** → 后续（跨会话 watch / adapter）
+> 版本线：0.4.0 → 0.5.x（control-plane kernel）→ 0.6.x（阶段门禁）→ 0.7.0（澄清减负、联审与知识收尾）→ 0.8.0（项目知识入口与维护）→ 0.9.1（规格统一到项目知识库）→ **0.10.0（可选 Acpus 执行后端）** → 后续（跨会话 watch / adapter）
 > 来源：相对 Claude Dynamic Workflows / acpus / LoopX 的差距分析（2026-08-06）；AI-native SDLC 分层对齐（2026-08-31）  
 > 本文件是**产品演进事实源**；切片执行状态以 `.devloop/<id>/plan.md` 为准。
 
@@ -148,13 +148,22 @@ Claude Workflow 是**单会话内**的确定性 JS 编排层（`agent()` / `para
 - setup、模板、定稿与收尾协议统一新路径；`.devloop/.gitignore` 移除 specs 例外，只处理任务过程材料。
 - 旧目录由协调者比较归并并修复引用；CLI 明确提示迁移，保留冲突原件，自动更新已知旧索引链接。
 
+### 0.10.0 — 可选 Acpus 执行后端
+
+- `--mode default|acpus` 显式选择，intent/plan 持久化并在恢复时校验；默认流程保留，无依赖自动降级。
+- doctor/detect-mode 检查可选安装和 TypeScript CLI 命令能力，新增 installation-acpus 与按模式加载的执行规程。
+- Acpus 计划增加批次内 T 子图、写入边界、验证和预算；门禁检查依赖无环及覆盖，next 路由到 Runtime 驱动的执行规程。
+- skill 协调者编译 workflow，独立 worktree 并行开发、串行集成、跨工具整片验收；运行检查点、失败累计与暂停/恢复规程明确。尚未内置通用 workflow 编译器或实时 dashboard。
+- 修复 next 对非法状态的完成误判，以及以 eval 读取计划名称的问题。
+- Acpus 0.16.1 真实验证覆盖并行 Agent、CLI/API 观测、暂停恢复、局部重试与跨工具验收，证据见 references/validation-acpus.md；环境检查补充原生 doctor、pause/resume 能力及未验证 Agent 的明确标识。
+
 ### 后续 — 跨会话与 adapter
 
 - `devloop tick` / `devloop watch`（跨会话调度，或导出 cron/launchd）
 - host adapter 接口（tmux / shell / orca）
 - typed human gate + safe fallback 切片
 - 简单 quota（每片 max attempt、每日 max tick）
-- 可选桥接 acpus（并行子图）/ LoopX（长期 goal 投影）
+- 扩展 Acpus adapter 的程序化状态投影；可选桥接 LoopX（长期 goal 投影）
 
 ### 后续 — 体验与生态
 
@@ -167,9 +176,9 @@ Claude Workflow 是**单会话内**的确定性 JS 编排层（`agent()` / `para
 1. **小而可验证**：每片独立测试；全量 `tests/*.test.sh` 全绿才算完成  
 2. **测试先行**：改动前跑基线；先加/改测试再实现；实现后再跑全量  
 3. **提交备份**：每片实现前记录 `BASE` commit；失败保留现场，按明确授权恢复本片改动，不自动清除用户修改
-4. **零第三方依赖**：POSIX sh + 标准工具  
+4. **核心零第三方依赖**：POSIX sh + 标准工具；acpus 为显式选择的可选依赖
 5. **不破坏 0.4.0 契约**：detect-runtime-host / launch-runner / 模板语义保持  
-6. **串行一片 open**：单向依赖 F1→F2→…  
+6. **串行一片 open**：单向依赖 F1→F2→…；acpus 可在一个 F 内并行独立 T，集成验收后才推进 F
 7. **本地 commit，不 push**（除非用户另行要求）
 
 ## 4. 成功标准（0.5.x 收官）

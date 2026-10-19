@@ -52,3 +52,48 @@ dl_sha256_file() {
     dl_die "need sha256sum or shasum"
   fi
 }
+
+# execution_mode 是执行后端；与 gate 的 mode=full|draft、review_mode 无关。
+dl_validate_mode() {
+  case "$1" in
+    default|acpus) return 0 ;;
+    *) printf 'error: --mode 只允许 default|acpus：%s\n' "$1" >&2; return 2 ;;
+  esac
+}
+
+# 缺字段的旧文件按 default 处理；拒绝重复/非法声明，不能静默切换后端。
+dl_file_mode() {
+  _dm_file=$1
+  [ -f "$_dm_file" ] || return 0
+  _dm_count=$(grep -c '^execution_mode:' "$_dm_file" || true)
+  [ "$_dm_count" -le 1 ] || { printf 'error: 重复 execution_mode：%s\n' "$_dm_file" >&2; return 2; }
+  if [ "$_dm_count" -eq 0 ]; then
+    printf 'default\n'
+    return
+  fi
+  _dm_value=$(sed -n 's/^execution_mode:[[:space:]]*//p' "$_dm_file" | sed 's/[[:space:]]*$//')
+  dl_validate_mode "$_dm_value" || return $?
+  printf '%s\n' "$_dm_value"
+}
+
+# 显式参数与持久记录必须一致。切换已有任务时先修订并重审受影响文档。
+dl_resolve_mode() {
+  _dm_requested=$1
+  shift
+  [ -z "$_dm_requested" ] || dl_validate_mode "$_dm_requested" || return $?
+  _dm_recorded=
+  for _dm_path in "$@"; do
+    _dm_next=$(dl_file_mode "$_dm_path") || return $?
+    [ -n "$_dm_next" ] || continue
+    if [ -n "$_dm_recorded" ] && [ "$_dm_recorded" != "$_dm_next" ]; then
+      printf 'error: intent/plan 的 execution_mode 不一致；先修订并重审受影响文档\n' >&2
+      return 1
+    fi
+    _dm_recorded=$_dm_next
+  done
+  if [ -n "$_dm_requested" ] && [ -n "$_dm_recorded" ] && [ "$_dm_requested" != "$_dm_recorded" ]; then
+    printf 'error: --mode=%s 与任务记录 %s 不一致；先修订并重审受影响文档\n' "$_dm_requested" "$_dm_recorded" >&2
+    return 1
+  fi
+  printf '%s\n' "${_dm_recorded:-${_dm_requested:-default}}"
+}

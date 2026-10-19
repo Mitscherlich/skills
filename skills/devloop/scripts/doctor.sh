@@ -7,6 +7,22 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
 # shellcheck disable=SC1091
 . "$HERE/lib/common.sh"
 ROOT=$(dl_skill_root "$HERE/doctor.sh")
+mode=default
+mode_seen=0
+acpus_cli=acpus
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mode|--acpus-cli)
+      [ $# -ge 2 ] && [ -n "$2" ] || { printf 'error: %s 需要值\n' "$1" >&2; exit 2; }
+      if [ "$1" = --mode ]; then
+        [ "$mode_seen" -eq 0 ] || { printf 'error: 重复 --mode\n' >&2; exit 2; }
+        mode=$2; mode_seen=1; dl_validate_mode "$mode"
+      else acpus_cli=$2; fi
+      shift 2 ;;
+    -h|--help) printf 'Usage: doctor.sh [--mode default|acpus] [--acpus-cli PATH]\n'; exit 0 ;;
+    *) printf 'error: unknown arg: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
 
 PASS=0
 FAIL=0
@@ -58,6 +74,11 @@ need_file "$ROOT/references/control-plane.md"
 need_file "$ROOT/references/loop.md"
 need_file "$ROOT/references/closeout.md"
 need_file "$ROOT/references/knowledge.md"
+need_file "$ROOT/references/installation-acpus.md"
+need_file "$ROOT/references/acpus-mode.md"
+need_file "$ROOT/templates/plan-acpus.md"
+need_file "$ROOT/scripts/detect-execution-mode.sh"
+need_file "$ROOT/scripts/validate-acpus-plan.awk"
 need_file "$ROOT/templates/knowledge-index.md"
 need_file "$ROOT/scripts/setup.sh"
 need_file "$ROOT/scripts/gitignore.sh"
@@ -91,13 +112,22 @@ need_sh_n "$ROOT/scripts/cleanup-orca-sessions.sh"
 need_sh_n "$ROOT/scripts/launch-runner-template.sh"
 need_sh_n "$ROOT/scripts/lib/common.sh"
 need_sh_n "$ROOT/scripts/doctor.sh"
+need_sh_n "$ROOT/scripts/detect-execution-mode.sh"
 
 # PATH tools used by host/tmux path
-if command -v tmux >/dev/null 2>&1; then
+if [ "$mode" = acpus ]; then
+  ok 'host:acpus (不要求 tmux/Orca)'
+elif command -v tmux >/dev/null 2>&1; then
   ok "path:tmux"
 else
   dl_warn "tmux not on PATH (tmux host unavailable)"
   bad "path:tmux"
+fi
+
+if sh "$HERE/detect-execution-mode.sh" --mode "$mode" --acpus-cli "$acpus_cli"; then
+  ok "mode:$mode"
+else
+  bad "mode:$mode (见 references/installation-acpus.md)"
 fi
 
 if command -v git >/dev/null 2>&1; then

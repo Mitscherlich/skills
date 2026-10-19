@@ -14,7 +14,9 @@
 
 ## 启动记录
 
-<!-- host / scheduler / coordinator / impl / reviewer / worktree / automation id 写这里 -->
+<!-- execution_mode / host / scheduler / coordinator / impl / reviewer / worktree / automation id 写这里。
+acpus 模式记录 CLI 路径/版本、ACPUS_HOME、Runtime workspace cwd、F/attempt/Run ID 映射、workflow 路径与 hash、累计尝试与预算起点；attemptNo 可能在组重试后重置，不作为累计计数。
+运行时状态向 Runtime 查询，本文件只做定位与证据摘要，不复制一套状态机。 -->
 
 ## 决定变更与确认来源
 
@@ -22,7 +24,7 @@
 
 ## 交互回放指标
 
-<!-- 关键问题数 / 重复确认数 / 开工后需求返工 / 错误完成次数；只记实际可核对的事实，不估算未观测的用户耗时。 -->
+<!-- 关键问题数 / 重复确认数 / 开工后需求返工 / 错误完成次数；acpus 增记关键路径耗时、重复失败原因与累计尝试。只记实际可核对的事实，缺失指标记未知，不估算未观测的用户耗时。 -->
 
 ## 巡检日志
 

@@ -1,6 +1,8 @@
-# Control-plane CLI 契约（0.9.1）
+# Control-plane CLI 契约（0.10.0）
 
 统一入口 `<skill>/scripts/devloop`。先用 `next --dir` 决定动作；规程通过 SKILL.md 的条件链接按需读取。
+
+`init/doctor/detect-mode/next/status/gate/review-packet` 支持 `--mode default|acpus`（命令前后均可，不能重复）。这是执行后端，与门禁 `mode=full|draft`、`review_mode=joint|separate` 无关；输出单独使用 `execution_mode`。新任务默认 default，恢复从 intent/plan 继承，无字段的旧文件按 default；显式参数与记录冲突或两份记录不一致均拒绝。修改已确认任务的后端需要修订并重审受影响执行合同，不能用参数临时覆盖。
 
 | 命令 | 行为 | 退出码 |
 |---|---|---|
@@ -8,19 +10,20 @@
 | `init --id ID [--title T] [--root DIR] [--stage S] [--force]` | 默认建 intent/progress/run；S 可为 intent/spec/plan/next-goal/progress/closeout；维护控制面内 .gitignore，仅忽略过程材料并迁移可识别旧规则，保留已跟踪文件原状；对目标 worktree（非 Git 为 root 父目录）只读检查知识入口，缺入口仅提示 setup | 0 成功 / 1 拒绝覆盖或失败 |
 | `gate intent --file PATH [--draft]` | 意图结构、本阶段阻塞与后续归属、审阅；新模板 joint，旧文件无模式为 separate | 0 通过 / 1 未通过 / 2 输入错误 |
 | `gate spec --file PATH [--intent PATH] [--draft]` | R 表、设计、过程残留、关注点、签署、上游 hash | 同上 |
-| `gate plan --file PATH [--spec PATH] [--draft]` | 切片状态、R→F 全覆盖、确认、上游 hash | 同上 |
+| `gate plan --file PATH [--spec PATH] [--draft]` | 切片状态、R→F 全覆盖、确认、上游 hash；acpus 额外检查预算、T 覆盖、依赖引用及无环 | 同上 |
 | `gate goal --file PATH [--spec PATH] [--plan PATH]` | 点火前结构、自 hash、上游绑定；拒绝 --draft | 同上 |
 | `next --dir DIR` | 完整管线动作；await_* 是等审阅，finalize 是请求核对收尾 | 0 / 输入错误非零 |
 | `next --plan PATH [--run-dir DIR]` | 仅投影切片下一步；不替代全管线与验收检查 | 同上 |
-| `status --plan PATH [--json]` | 切片状态计数；多 open 非法 | 0 / 1 |
+| `status --plan PATH [--json]` | 切片状态计数和 execution_mode；多 open、未知状态非法；不读取外部 Runtime | 0 / 1（非法参数 2） |
 | `review-packet --devloop-dir PATH` | 展示正式门禁、状态、next、报告数量和摘要；非验收报告 | 0 |
 | `stage validate\|can\|transitions --from S [--to S]` | 管线合法转移查询，无持久化副作用 | can: 0 合法 / 1 拒绝 |
 | `state validate\|can\|transitions --from S [--to S]` | 切片合法转移查询 | 同上 |
 | `attempt new\|archive ...` | 新 attempt / 运行目录内部旧报告搬移；仅保留本轮重试证据，与持久规格归位无关 | 0 / 1 |
 | `lock acquire\|release\|check --run-dir D --phase P` | mkdir 阶段锁：compile/impl/review/advance | acquire: 0 获得 / 1 忙 |
 | `detect-host ...` / `detect-scheduler ...` | 探测 host 与调度能力 | 见对应 --help |
+| `detect-mode [--dir DIR] [--mode default\|acpus] [--acpus-cli PATH]` | 只读检查模式、Acpus 必要命令及原生 doctor，Agent 就绪状态始终为 unchecked；返回安装/执行参考路径；default 不执行 Acpus | 0 可用或可选缺失 / 1 acpus 不可用或模式冲突 / 2 参数错误 |
 | `cleanup-sessions ...` | 仅关闭指定 worktree 的已完成 session，保留 keep 集合 | 0 / 非零失败 |
-| `doctor` / `run-tests` | 安装自检 / 全部 tests/*.test.sh | tests: 0 全绿 / 1 失败 / 2 无测试 |
+| `doctor [--mode default\|acpus] [--acpus-cli PATH]` / `run-tests` | 按所选模式自检，acpus 不要求 tmux/Orca；全部 tests/*.test.sh | tests: 0 全绿 / 1 失败 / 2 无测试 |
 
 ## 草稿和正式门禁
 
@@ -33,10 +36,10 @@
 - 管线：intent → spec → plan → loop → done；打回 spec→intent / plan→spec / loop→plan / done→loop。
 - 切片：pending → open → implementing → reviewing → done；支持 paused 和 re-open，见 `state transitions`。
 
-plan 是切片状态事实源；收尾不新增一套状态数据库。发布状态与下一轮候选记在 closeout，实际发布凭据在项目既有平台。新一轮创建新 ID，并引用 parent 与候选来源，不把旧 done 重解释成新任务。
+plan 是切片验收事实源，只持久化 open/pending/done/paused；implementing/reviewing 是 attempt 执行阶段，不写回 roadmap。acpus 的 T 状态从 Runtime 读取，`next` 返回 `phase_hint=acpus_workflow` 和对应规程，不根据 default 报告数量推断阶段；命令不会自动提交或轮询 Run。收尾不新增一套状态数据库。发布状态与下一轮候选记在 closeout，实际发布凭据在项目既有平台。新一轮创建新 ID，并引用 parent 与候选来源，不把旧 done 重解释成新任务。
 
 ## 依赖与限制
 
-核心沿用 POSIX sh、git、awk/sed、SHA 工具。本版不含跨会话 daemon 或发布平台。运行协议见 [loop.md](loop.md)，收尾与旧流程处理见 [closeout.md](closeout.md)。
+核心沿用 POSIX sh、git、awk/sed、SHA 工具。default 不新增外部依赖；acpus 是可选后端，由 skill 协调者按已安装版本编译 TypeScript workflow，运行与恢复交给外部 Runtime，不是内置通用 workflow 编译器。安装见 [installation-acpus.md](installation-acpus.md)；两种运行协议分别见 [loop.md](loop.md)、[acpus-mode.md](acpus-mode.md)，收尾见 [closeout.md](closeout.md)。
 
 `archive --dir --output` / `archive --verify` 外部整包方案已移除；CLI 返回迁移提示，不再打包。用 skill 按 [知识维护协议](knowledge.md) 将定稿需求合并到持久 specs，收尾将其它内容分别归位。

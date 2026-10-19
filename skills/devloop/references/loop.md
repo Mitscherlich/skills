@@ -1,5 +1,7 @@
 # devloop 执行协议（进入 loop 后读取）
 
+本文件只用于 `execution_mode: default`（含无字段的旧任务）。`acpus` 模式改读 [acpus-mode.md](acpus-mode.md)，不执行本文件的宿主、调度和哨兵流程。
+
 进入执行前运行 intent/spec/plan 三个正式门禁并核对真实确认来源；`--draft` 不能授权点火。协调者不内联业务实现，保持 host runner 与独立 reviewer 的职责隔离。
 
 默认只做本地提交。用户另行授权发布时，完成本轮验收后按 [收尾协议](closeout.md) 对接项目发布流程。

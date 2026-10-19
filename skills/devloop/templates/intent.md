@@ -1,6 +1,7 @@
 # {{id}} · {{title}} · intent
 
 review_mode: joint
+execution_mode: {{mode}}
 
 > 当前生效的意图；先给简短草稿，只问本阶段阻塞问题。joint 为 spec/plan 联审，separate 为分别签署。
 > 创建时间：{{created}}

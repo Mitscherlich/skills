@@ -13,8 +13,8 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 usage() {
   cat <<'EOF'
 Usage:
-  next-action.sh --dir .devloop/<id>
-  next-action.sh --plan PATH [--run-dir DIR]
+  next-action.sh --dir .devloop/<id> [--mode default|acpus]
+  next-action.sh --plan PATH [--run-dir DIR] [--mode default|acpus]
 EOF
   exit 2
 }
@@ -22,15 +22,26 @@ EOF
 dir=
 plan=
 run_dir=
+requested_mode=
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) dir=$2; shift 2 ;;
     --plan) plan=$2; shift 2 ;;
     --run-dir) run_dir=$2; shift 2 ;;
+    --mode)
+      [ $# -ge 2 ] && [ -n "$2" ] && [ -z "$requested_mode" ] || { printf 'error: --mode 缺值或重复\n' >&2; exit 2; }
+      requested_mode=$2; dl_validate_mode "$requested_mode"; shift 2 ;;
     -h|--help) usage ;;
     *) dl_die "unknown arg: $1" ;;
   esac
 done
+
+if [ -n "$dir" ]; then
+  mode=$(dl_resolve_mode "$requested_mode" "$dir/intent.md" "$dir/plan.md")
+else
+  mode=$(dl_resolve_mode "$requested_mode" "$plan")
+fi
+printf 'execution_mode=%s\n' "$mode"
 
 emit_gate_failures() {
   printf '%s\n' "$1" | grep '^fail=' || true
@@ -134,8 +145,15 @@ fi
 [ -n "$plan" ] || dl_die "--dir or --plan required"
 [ -f "$plan" ] || dl_die "plan not found: $plan"
 
-status_out=$(sh "$HERE/status.sh" --plan "$plan") || true
-eval "$(printf '%s\n' "$status_out" | grep -E '^(open_id|open_name|open|done|pending|paused)=')"
+status_out=$(sh "$HERE/status.sh" --plan "$plan") || dl_die 'plan 状态非法；不能推断下一步'
+# plan 名称是数据，不能 eval 为 shell 代码。
+open_id=$(printf '%s\n' "$status_out" | sed -n 's/^open_id=//p')
+open_name=$(printf '%s\n' "$status_out" | sed -n 's/^open_name=//p')
+open=$(printf '%s\n' "$status_out" | sed -n 's/^open=//p')
+done_n=$(printf '%s\n' "$status_out" | sed -n 's/^done=//p')
+pending=$(printf '%s\n' "$status_out" | sed -n 's/^pending=//p')
+paused=$(printf '%s\n' "$status_out" | sed -n 's/^paused=//p')
+[ "$((open + done_n + pending + paused))" -gt 0 ] || dl_die 'plan 没有切片；不能判定完成'
 
 if [ "${open:-0}" -eq 0 ]; then
   if [ "${pending:-0}" -gt 0 ]; then
@@ -161,6 +179,13 @@ printf 'action=work_open_slice\n'
 printf 'slice_id=%s\n' "$open_id"
 printf 'slice_name=%s\n' "$open_name"
 printf 'read=%s\n' "$plan"
+
+if [ "$mode" = acpus ]; then
+  printf 'phase_hint=acpus_workflow\n'
+  printf 'read=%s\n' "$HERE/../references/acpus-mode.md"
+  printf 'reason=按当前切片的 Acpus Run 状态推进；不要使用 default 的报告数量或终端哨兵判定\n'
+  exit 0
+fi
 
 if [ -n "$run_dir" ] && [ -d "$run_dir" ]; then
   reports=$(find "$run_dir" -maxdepth 1 -name '*-report.md' 2>/dev/null | wc -l | tr -d ' ')

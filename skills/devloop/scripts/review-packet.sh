@@ -9,15 +9,19 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   cat <<'EOF'
-Usage: review-packet.sh --devloop-dir PATH
+Usage: review-packet.sh --devloop-dir PATH [--mode default|acpus]
 EOF
   exit 2
 }
 
 devloop_dir=
+requested_mode=
 while [ $# -gt 0 ]; do
   case "$1" in
     --devloop-dir) devloop_dir=$2; shift 2 ;;
+    --mode)
+      [ $# -ge 2 ] && [ -n "$2" ] && [ -z "$requested_mode" ] || { printf 'error: --mode 缺值或重复\n' >&2; exit 2; }
+      requested_mode=$2; dl_validate_mode "$requested_mode"; shift 2 ;;
     -h|--help) usage ;;
     *) dl_die "unknown arg: $1" ;;
   esac
@@ -28,9 +32,15 @@ done
 plan="$devloop_dir/plan.md"
 progress="$devloop_dir/progress.md"
 run_dir="$devloop_dir/run"
+mode=$(dl_resolve_mode "$requested_mode" "$devloop_dir/intent.md" "$plan")
 
 printf '# devloop review packet\n\n'
 printf 'devloop_dir: %s\n' "$devloop_dir"
+printf 'execution_mode: %s\n' "$mode"
+if [ "$mode" = acpus ]; then
+  printf 'Acpus 子任务状态需读取已记录的 Run；本摘要不查询 Runtime，也不将运行完成视为验收通过。\n'
+  printf '执行参考：%s\n' "$HERE/../references/acpus-mode.md"
+fi
 printf 'generated: %s\n\n' "$(dl_utc_stamp)"
 
 intent="$devloop_dir/intent.md"
@@ -88,7 +98,13 @@ else
 fi
 
 printf '## Artifacts\n\n'
-if [ -d "$run_dir" ]; then
+if [ "$mode" = acpus ]; then
+  printf -- '- Acpus evidence root: %s/acpus\n' "$run_dir"
+  printf -- '- 以下为批次 attempt 目录，不代表运行状态或验收结论；Run ID 映射见 progress。\n'
+  if [ -d "$run_dir/acpus" ]; then
+    find "$run_dir/acpus" -mindepth 2 -maxdepth 2 -type d | sort
+  fi
+elif [ -d "$run_dir" ]; then
   n_report=$(find "$run_dir" -maxdepth 1 -name '*-report.md' 2>/dev/null | wc -l | tr -d ' ')
   n_acc=$(find "$run_dir" -maxdepth 1 -name '*-acceptance.md' 2>/dev/null | wc -l | tr -d ' ')
   n_arch=$(find "$run_dir/archive" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')

@@ -1,10 +1,12 @@
-# {{id}} · {{title}} · plan（loop 单一事实源）
+# {{id}} · {{title}} · plan（切片验收事实源）
 
-> **阶段：plan（spec 编译产物）**。本文件是 loop 的**单一事实源**——哨兵与核验 agent 只认这里的切片状态列。
+execution_mode: {{mode}}
+
+> **阶段：plan（spec 编译产物）**。本文件是切片验收的事实源；acpus 模式的子任务运行状态以 Acpus Runtime 为准，不能用节点 completed 代替切片验收。
 > 上游：`spec.md`
 > spec_sha256: {{gate spec 通过时输出的 sha256}}
 > 准出门禁：`devloop gate plan --file <本文件> --spec <spec.md>` 全绿 **且** 确认记录齐全，才能进入 loop。
-> 执行区：worktree `{{绝对路径}}`（分支 `feat/devloop-{{id}}`）。host=`{{tmux|orca}}`。**绝不 push**。
+> 执行区：worktree `{{绝对路径}}`（分支 `feat/devloop-{{id}}`）。host=`{{tmux|orca|acpus}}`。**绝不 push**。
 > 每轮点火生成 attempt_id；产物路径含 attempt，或启动前把旧产物归档到 `run/archive/<attempt_id>/`。
 > 切片状态词固定：`open`（当前在做，至多一个）/ `done (commit, 门禁数字)` / `pending` / `paused(原因)`。
 
@@ -34,11 +36,11 @@
 - 确认人：{{用户 / 责任人}}
 - 确认时间：{{ISO 时间}}
 - 确认范围：{{本 plan 覆盖哪些切片，哪些暂停}}
-- 执行宿主（`--host`）：{{tmux|orca|自动探测}} —— **以 `devloop detect-host` 输出的 `host=` 为准**
+- 执行宿主（`--host`）：{{default 用 tmux|orca|自动探测；acpus 写 acpus}} —— default 以 `devloop detect-host` 输出为准，acpus 不跑 host/scheduler 探测
   - 用户 `--host=` / `DEVLOOP_HOST=` 走严格 `--force`；仅偏好且允许降级时用 `--prefer`
-- 哨兵调度：{{loop|orca-automation|cronjob}} —— **以 `devloop detect-scheduler` 为准**
+- 哨兵调度：{{default 用 loop|orca-automation|cronjob；acpus 写 Runtime}} —— default 以 `devloop detect-scheduler` 为准
 - 协调者：{{claude-code|codex|grok|omp|…}}
-- Orca setup policy：{{run|skip|inherit —— host=tmux 时写「不适用」}}
+- Orca setup policy：{{run|skip|inherit —— 非 Orca 时写「不适用」}}
 - 权限与 threat model：{{默认最小权限；若启用 bypassPermissions / danger sandbox，粘贴用户授权原文与必要性}}
 - 实现 runner（`--impl`）：{{claude-code|codex|grok}}
 - 对抗验收（`--reviewer`）：{{与 impl 不同的工具，或「按默认配对」}}
@@ -65,10 +67,10 @@
 
 1. 范围内新逻辑有测试；全仓门禁 {{lint/typecheck/test 命令}} 全绿。
 2. 本地 commit（message 前缀 `feat({{id}}-<slice>):`），**绝不 push**。
-3. impl runner 报告写 `.devloop/{{id}}/run/<impl>-<slice>-report.md`：`attempt_id`、`goal_sha256`、`base_sha`、`head_sha`、变更清单、门禁数字、设计取舍、计划偏差；先写同目录临时文件，完整落盘后 atomic rename。
-4. reviewer 写 `.devloop/{{id}}/run/<impl>-<slice>-acceptance.md`（注明 impl/reviewer 及同一组 attempt/hash，记录 reviewed `head_sha`），结论为 `全部完成` 且当前 HEAD 未漂移才能推进下一片。
+3. impl runner 报告写 `.devloop/{{id}}/run/<impl>-<slice>-report.md`：`attempt_id`、`goal_sha256`、`base_sha`、`head_sha`、变更清单、门禁数字、设计取舍、计划偏差；先写同目录临时文件，完整落盘后 atomic rename。acpus 改用 `run/acpus/<F>/<attempt>/` 下的独立路径，保持字段和完成标准。
+4. reviewer 写 `.devloop/{{id}}/run/<impl>-<slice>-acceptance.md`（acpus 使用上述隔离目录，注明 impl/reviewer 及同一组 attempt/hash，记录 reviewed `head_sha`），结论为 `全部完成` 且当前 HEAD 未漂移才能推进下一片。
 5. 遇下列情况**停止并在报告写明 BLOCKED**：语义歧义无法自决 / 门禁 3 轮修复不过 / 需要外部凭据。
 
 ## loop 小周期协议
 
-进入执行或恢复时读技能的 `references/loop.md`；全切片 done 后按 `references/closeout.md` 核对验收、将规格和知识归位、准备发布交接与候选。执行区交接需显式复制任务过程材料并核对 progress 记录的 plan hash，同时核对持久规格/知识版本。
+进入执行或恢复时，default 读技能的 `references/loop.md`，acpus 读 `references/acpus-mode.md`；全切片 done 后按 `references/closeout.md` 核对验收、将规格和知识归位、准备发布交接与候选。执行区交接需显式复制任务过程材料并核对 progress 记录的 plan hash，同时核对持久规格/知识版本。

@@ -63,6 +63,8 @@ stage 只接受 spec / plan / impl / release；owner 和 due 均非空。due 说
 - 确认记录包含范围、host/impl/reviewer、权限、source worktree/base、控制面与规格/知识归位范围、清理边界。能探测的选项自动填写；权限例外由真实授权支持。
 - 切片状态为 open / pending / done (...) / paused(...)。plan 是切片状态唯一事实源，goal 不推进它。
 
+`execution_mode: acpus` 时，F 表示顺序验收批次；用 `init --stage plan` 继承模式并追加 [plan-acpus.md](../templates/plan-acpus.md) 合同。先明确公共契约，再将独立模块拆成同一 F 内的 T 子图，声明依赖、写入边界、验证命令、并发与累计预算；结构门禁检查覆盖/引用/无环，语义独立性由协调者查代码核验。批次之间仍至多一个 open，最终集成和全批次验收不可省略。具体编译与执行见 [acpus-mode.md](acpus-mode.md)。
+
 ## 联审和 hash 封存顺序
 
 1. 先运行 intent 正式门禁、spec/plan 草稿门禁。联审摘要指向两份草稿全文，显示关键取舍、前置条件和授权范围。
@@ -70,7 +72,7 @@ stage 只接受 spec / plan / impl / release；owner 和 due 均非空。due 说
 3. 用户确认的内容不变时，先填写 spec 签署元数据，跑正式 B 得到最终 spec hash；再填写 plan 的 `spec_sha256` 和确认元数据，跑正式 C。这一步只同步签署/绑定元数据，不需要让用户再次审阅同一语义内容。
 4. 若任一业务内容变更，则展示差异、核对影响、重新取得所需确认并重编译受影响下游。禁止用直接替换 hash 掩盖内容漂移。
 5. plan 的「进入 loop 结论」使用 `通过` / `确认进入` / `同意进入`，原话放另一个来源字段。确认 plan 的自 hash 存 progress 或交接记录，**不要把整份文件的 hash 写回自身造成自引用**。
-6. 签署封存后按 [知识维护协议](knowledge.md) 将定稿需求合并到 `docs/knowledge/specs/`，保留本轮签署原件和绑定；需求定稿与实现验收分开记录。执行前再次运行三个正式门禁、核对真实授权及前置条件，再按 [loop.md](loop.md) 点火。签署文本不是身份认证，CLI 的通过不替代语义和授权核验。
+6. 签署封存后按 [知识维护协议](knowledge.md) 将定稿需求合并到 `docs/knowledge/specs/`，保留本轮签署原件和绑定；需求定稿与实现验收分开记录。执行前再次运行三个正式门禁、核对真实授权及前置条件，再按所选模式的 [default](loop.md) / [acpus](acpus-mode.md) 规程点火。签署文本不是身份认证，CLI 的通过不替代语义和授权核验。
 
 ## Goal 与打回
 

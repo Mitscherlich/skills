@@ -24,6 +24,7 @@ Usage:
   gate.sh goal   --file PATH [--spec PATH] [--plan PATH]
 
   intent/spec/plan 可加 --draft：仅检查内容，忽略签署区；不能授权执行。
+  所有阶段可加 --mode default|acpus：显式选择须与任务记录一致。
 
 Exit: 0 pass / 1 fail / 2 usage
 EOF
@@ -278,6 +279,14 @@ gate_plan() {
     '## 背景与目标' '## 需求追溯' '## 确认记录' '## 切片 roadmap' '## 每片统一 DoD'
   check_placeholders "$file" P
   check_todo_markers "$file" P
+  if [ "$execution_mode" = acpus ]; then
+    if acpus_checks=$(awk -f "$HERE/validate-acpus-plan.awk" "$file"); then
+      pass_check
+    else
+      fail_check P-acpus '并行子图或预算不合法'
+      printf '%s\n' "$acpus_checks"
+    fi
+  fi
 
   # roadmap 表 + 唯一 open（复用 status.sh）
   status_out=$(sh "$HERE/status.sh" --plan "$file" 2>/dev/null) || status_out=""
@@ -430,6 +439,7 @@ file=
 up_intent=
 up_spec=
 up_plan=
+requested_mode=
 while [ $# -gt 0 ]; do
   case "$1" in
     --draft) DRAFT=1; shift ;;
@@ -437,6 +447,9 @@ while [ $# -gt 0 ]; do
     --intent) up_intent=$2; shift 2 ;;
     --spec) up_spec=$2; shift 2 ;;
     --plan) up_plan=$2; shift 2 ;;
+    --mode)
+      [ $# -ge 2 ] && [ -n "$2" ] && [ -z "$requested_mode" ] || usage_err '--mode 缺值或重复'
+      requested_mode=$2; dl_validate_mode "$requested_mode"; shift 2 ;;
     -h|--help) usage ;;
     *) usage_err "unknown arg: $1" ;;
   esac
@@ -448,8 +461,18 @@ done
 [ -f "$file" ] || usage_err "file not found: $file"
 [ -s "$file" ] || usage_err "file is empty: $file"
 
+# 只有 intent/plan 承载后端选择；goal 继承传入的 plan，spec 继承 intent。
+case "$stage" in
+  intent) execution_mode=$(dl_resolve_mode "$requested_mode" "$file") ;;
+  plan) execution_mode=$(dl_resolve_mode "$requested_mode" "$(dirname -- "$file")/intent.md" "$file") ;;
+  spec) execution_mode=$(dl_resolve_mode "$requested_mode" "$up_intent") ;;
+  goal) execution_mode=$(dl_resolve_mode "$requested_mode" "$up_plan") ;;
+  *) execution_mode=$(dl_resolve_mode "$requested_mode") ;;
+esac
+
 printf 'stage=%s\n' "$stage"
 printf 'file=%s\n' "$file"
+printf 'execution_mode=%s\n' "$execution_mode"
 if [ "$DRAFT" -eq 1 ]; then printf 'mode=draft\napproval=not_checked\n'; else printf 'mode=full\n'; fi
 
 case "$stage" in

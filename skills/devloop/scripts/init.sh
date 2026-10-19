@@ -18,7 +18,7 @@ ROOT_SKILL=$(dl_skill_root "$HERE/init.sh")
 
 usage() {
   cat <<'EOF'
-Usage: init.sh --id <id> [--title T] [--root DIR] [--stage intent|spec|plan|next-goal|progress|closeout] [--force]
+Usage: init.sh --id <id> [--title T] [--root DIR] [--mode default|acpus] [--stage intent|spec|plan|next-goal|progress|closeout] [--force]
 
 Defaults: --root .devloop ; 不带 --stage 时落盘 intent.md + progress.md 并建 run/
 Exit: 0 ok / 1 refuse (exists without --force) / 2 usage
@@ -31,6 +31,7 @@ title=
 root=.devloop
 stage=
 force=0
+requested_mode=
 while [ $# -gt 0 ]; do
   case "$1" in
     --id) id=$2; shift 2 ;;
@@ -38,6 +39,10 @@ while [ $# -gt 0 ]; do
     --root) root=$2; shift 2 ;;
     --stage) stage=$2; shift 2 ;;
     --force) force=1; shift ;;
+    --mode)
+      [ $# -ge 2 ] && [ -n "$2" ] || { printf 'error: --mode 需要值\n' >&2; exit 2; }
+      [ -z "$requested_mode" ] || { printf 'error: 重复 --mode\n' >&2; exit 2; }
+      requested_mode=$2; dl_validate_mode "$requested_mode"; shift 2 ;;
     -h|--help) usage ;;
     *) dl_die "unknown arg: $1" ;;
   esac
@@ -52,12 +57,23 @@ esac
 
 created=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || dl_utc_stamp)
 dir="$root/$id"
+mode=$(dl_resolve_mode "$requested_mode" "$dir/intent.md" "$dir/plan.md")
+if [ "$mode" = acpus ] && [ ! -f "$dir/intent.md" ] && [ ! -f "$dir/plan.md" ]; then
+  case "$stage" in
+    ''|intent|plan) ;;
+    *) dl_die '新 Acpus 任务先 init（不带 --stage），将模式写入 intent；不能仅创建无模式记录的阶段' ;;
+  esac
+fi
+case "$stage" in
+  ''|intent|spec|plan|next-goal|progress|closeout) ;;
+  *) dl_die "unknown --stage: $stage" ;;
+esac
 tpl_dir="$ROOT_SKILL/templates"
 [ -d "$tpl_dir" ] || dl_die "templates dir missing: $tpl_dir"
 
 # 字面量替换，避开 sed 的分隔符 / 元字符问题
 render() {
-  awk -v id="$1" -v title="$2" -v created="$3" '
+  awk -v id="$1" -v title="$2" -v created="$3" -v mode="$mode" '
     function rep(s, from, to,   out, p) {
       out = ""
       while ((p = index(s, from)) > 0) {
@@ -70,6 +86,7 @@ render() {
       line = rep($0, "{{id}}", id)
       line = rep(line, "{{title}}", title)
       line = rep(line, "{{created}}", created)
+      line = rep(line, "{{mode}}", mode)
       print line
     }
   ' "$4"
@@ -85,6 +102,9 @@ materialize() {
     return 1
   fi
   render "$id" "$title" "$created" "$_src" >"$_dst.tmp"
+  if [ "$_stage" = plan ] && [ "$mode" = acpus ]; then
+    render "$id" "$title" "$created" "$tpl_dir/plan-acpus.md" >>"$_dst.tmp"
+  fi
   mv -f "$_dst.tmp" "$_dst"
   printf 'wrote=%s\n' "$_dst"
   return 0
@@ -103,6 +123,7 @@ if ! sh "$HERE/setup.sh" --project "$knowledge_project" --check; then
 fi
 printf 'dir=%s\n' "$dir"
 printf 'id=%s\n' "$id"
+printf 'execution_mode=%s\n' "$mode"
 printf 'created=%s\n' "$created"
 
 rc=0
