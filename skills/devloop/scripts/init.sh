@@ -18,7 +18,7 @@ ROOT_SKILL=$(dl_skill_root "$HERE/init.sh")
 
 usage() {
   cat <<'EOF'
-Usage: init.sh --id <id> [--title T] [--root DIR] [--mode default|acpus] [--stage intent|spec|plan|next-goal|progress|closeout] [--force]
+Usage: init.sh --id <id> [--title T] [--root DIR] [--mode host|acpus] [--host tmux|herdr|orca] [--stage intent|spec|plan|next-goal|progress|closeout] [--force]
 
 Defaults: --root .devloop ; 不带 --stage 时落盘 intent.md + progress.md 并建 run/
 Exit: 0 ok / 1 refuse (exists without --force) / 2 usage
@@ -31,6 +31,7 @@ title=
 root=.devloop
 stage=
 force=0
+requested_host=
 requested_mode=
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -39,6 +40,9 @@ while [ $# -gt 0 ]; do
     --root) root=$2; shift 2 ;;
     --stage) stage=$2; shift 2 ;;
     --force) force=1; shift ;;
+    --host)
+      [ $# -ge 2 ] && [ -n "$2" ] && [ -z "$requested_host" ] || { printf 'error: --host 缺值或重复\n' >&2; exit 2; }
+      requested_host=$2; dl_validate_host "$requested_host"; shift 2 ;;
     --mode)
       [ $# -ge 2 ] && [ -n "$2" ] || { printf 'error: --mode 需要值\n' >&2; exit 2; }
       [ -z "$requested_mode" ] || { printf 'error: 重复 --mode\n' >&2; exit 2; }
@@ -58,6 +62,13 @@ esac
 created=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || dl_utc_stamp)
 dir="$root/$id"
 mode=$(dl_resolve_mode "$requested_mode" "$dir/intent.md" "$dir/plan.md")
+runtime_host=$(dl_resolve_host "$requested_host" "$dir/intent.md" "$dir/plan.md")
+if [ "$mode" = acpus ] && [ "$runtime_host" != auto ]; then
+  dl_die '--host 仅用于 --mode host；Acpus 自行管理 ACP agent 进程'
+fi
+if [ -n "$requested_host" ] && [ ! -f "$dir/intent.md" ] && [ ! -f "$dir/plan.md" ]; then
+  case "$stage" in ''|intent|plan) ;; *) dl_die '指定 --host 的新任务先 init，保存宿主记录' ;; esac
+fi
 if [ "$mode" = acpus ] && [ ! -f "$dir/intent.md" ] && [ ! -f "$dir/plan.md" ]; then
   case "$stage" in
     ''|intent|plan) ;;
@@ -73,7 +84,7 @@ tpl_dir="$ROOT_SKILL/templates"
 
 # 字面量替换，避开 sed 的分隔符 / 元字符问题
 render() {
-  awk -v id="$1" -v title="$2" -v created="$3" -v mode="$mode" '
+  awk -v id="$1" -v title="$2" -v created="$3" -v mode="$mode" -v runtime_host="$runtime_host" '
     function rep(s, from, to,   out, p) {
       out = ""
       while ((p = index(s, from)) > 0) {
@@ -87,6 +98,7 @@ render() {
       line = rep(line, "{{title}}", title)
       line = rep(line, "{{created}}", created)
       line = rep(line, "{{mode}}", mode)
+      line = rep(line, "{{runtime_host}}", runtime_host)
       print line
     }
   ' "$4"
@@ -124,6 +136,7 @@ fi
 printf 'dir=%s\n' "$dir"
 printf 'id=%s\n' "$id"
 printf 'execution_mode=%s\n' "$mode"
+printf 'runtime_host=%s\n' "$runtime_host"
 printf 'created=%s\n' "$created"
 
 rc=0

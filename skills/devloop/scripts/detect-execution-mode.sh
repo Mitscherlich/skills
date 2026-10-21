@@ -20,7 +20,7 @@ while [ $# -gt 0 ]; do
       esac
       shift 2 ;;
     -h|--help)
-      printf 'Usage: detect-execution-mode.sh [--mode default|acpus] [--dir DIR] [--acpus-cli PATH]\n'
+      printf 'Usage: detect-execution-mode.sh [--mode host|acpus] [--dir DIR] [--acpus-cli PATH]\n'
       exit 0 ;;
     *) printf 'error: unknown arg: %s\n' "$1" >&2; exit 2 ;;
   esac
@@ -37,7 +37,7 @@ version=
 resolved=$(command -v "$acpus_cli" 2>/dev/null || true)
 if [ -n "$resolved" ]; then
   status=present
-  # default 只报告可选安装是否存在，不执行第三方 CLI，也不依赖其健康。
+  # host 只报告可选安装是否存在，不执行第三方 CLI，也不依赖其健康。
   if [ "$mode" = acpus ]; then
     if version=$("$resolved" --version 2>/dev/null) && [ -n "$version" ]; then
       status=ok
@@ -64,7 +64,7 @@ printf 'installation_reference=%s\n' "$HERE/../references/installation-acpus.md"
 if [ "$mode" = acpus ]; then
   printf 'execution_reference=%s\n' "$HERE/../references/acpus-mode.md"
   if [ "$status" != ok ]; then
-    printf 'error: Acpus 不可用（%s）；按 installation-acpus.md 安装或修复；unhealthy 时运行 acpus doctor 查看详情，不自动切回 default\n' "$status" >&2
+    printf 'error: Acpus 不可用（%s）；按 installation-acpus.md 安装或修复；unhealthy 时运行 acpus doctor 查看详情，不自动切回 host\n' "$status" >&2
     exit 1
   fi
 else

@@ -24,7 +24,7 @@ Usage:
   gate.sh goal   --file PATH [--spec PATH] [--plan PATH]
 
   intent/spec/plan 可加 --draft：仅检查内容，忽略签署区；不能授权执行。
-  所有阶段可加 --mode default|acpus：显式选择须与任务记录一致。
+  所有阶段可加 --mode host|acpus：显式选择须与任务记录一致。
 
 Exit: 0 pass / 1 fail / 2 usage
 EOF

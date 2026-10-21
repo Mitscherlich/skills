@@ -16,7 +16,7 @@ not_ok() { FAIL=$((FAIL + 1)); printf 'not ok %s - %s\n' "$((PASS + FAIL))" "$1"
 if sh -n "$DL"; then ok 'sh -n devloop'; else not_ok 'sh -n devloop'; fi
 
 ver=$(sh "$DL" version)
-[ "$ver" = "0.10.0" ] && ok 'version 0.10.0' || not_ok 'version 0.10.0'
+[ "$ver" = "0.11.0" ] && ok 'version 0.11.0' || not_ok 'version 0.11.0'
 
 if sh "$DL" help >/dev/null; then ok 'help exits 0'; else not_ok 'help exits 0'; fi
 

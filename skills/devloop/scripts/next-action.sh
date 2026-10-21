@@ -13,8 +13,8 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 usage() {
   cat <<'EOF'
 Usage:
-  next-action.sh --dir .devloop/<id> [--mode default|acpus]
-  next-action.sh --plan PATH [--run-dir DIR] [--mode default|acpus]
+  next-action.sh --dir .devloop/<id> [--mode host|acpus]
+  next-action.sh --plan PATH [--run-dir DIR] [--mode host|acpus]
 EOF
   exit 2
 }
@@ -183,7 +183,7 @@ printf 'read=%s\n' "$plan"
 if [ "$mode" = acpus ]; then
   printf 'phase_hint=acpus_workflow\n'
   printf 'read=%s\n' "$HERE/../references/acpus-mode.md"
-  printf 'reason=按当前切片的 Acpus Run 状态推进；不要使用 default 的报告数量或终端哨兵判定\n'
+  printf 'reason=按当前切片的 Acpus Run 状态推进；不要使用 host 的报告数量或终端哨兵判定\n'
   exit 0
 fi
 

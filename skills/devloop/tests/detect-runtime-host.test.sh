@@ -227,6 +227,34 @@ else
   not_ok 'sh -n launch-runner-template.sh'
 fi
 
+# Herdr 安装优先于 tmux，但不抢当前健康 Orca 会话。
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$BIN/herdr"
+chmod +x "$BIN/herdr"
+: >"$CALLS"
+env -i PATH="$BIN:$SYSTEM_PATH" ORCA_CALL_LOG="$CALLS" "$DETECT" >"$OUT" 2>"$ERR"
+assert_status 'installed Herdr selected outside Orca' 0 $?
+assert_contains 'Herdr outranks tmux' "$OUT" '^host=herdr$'
+assert_empty_file 'installed Orca outside its session is not queried' "$CALLS"
+env -i PATH="$BIN:$SYSTEM_PATH" TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" "$DETECT" >"$OUT" 2>"$ERR"
+assert_status 'healthy Orca session outranks Herdr' 0 $?
+assert_contains 'Orca remains first' "$OUT" '^host=orca$'
+env -i PATH="$BIN:$SYSTEM_PATH" TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" \
+  FAKE_ORCA_JSON='{"runtime":{"reachable":false}}' "$DETECT" >"$OUT" 2>"$ERR"
+assert_status 'unhealthy Orca falls back to Herdr' 0 $?
+assert_contains 'fallback chooses Herdr before tmux' "$OUT" '^host=herdr$'
+: >"$CALLS"
+env -i PATH="$BIN:$SYSTEM_PATH" TERM_PROGRAM=Orca ORCA_CALL_LOG="$CALLS" "$DETECT" --host herdr --json >"$OUT" 2>"$ERR"
+assert_status 'explicit Herdr JSON succeeds' 0 $?
+assert_contains 'JSON reports Herdr availability' "$OUT" '"herdr_available": 1'
+assert_empty_file 'explicit Herdr skips Orca probe' "$CALLS"
+env -i PATH="$BIN:$SYSTEM_PATH" "$DETECT" --host tmux >"$OUT" 2>"$ERR"
+assert_status 'explicit tmux overrides installed Herdr' 0 $?
+assert_contains 'explicit tmux selection' "$OUT" '^host=tmux$'
+rm "$BIN/herdr"
+env -i PATH="$BIN:$SYSTEM_PATH" "$DETECT" --host herdr >"$OUT" 2>"$ERR"
+assert_status 'missing explicit Herdr fails without fallback' 1 $?
+assert_contains 'missing explicit Herdr retains selection' "$OUT" '^host=herdr$'
+
 TOTAL=$((PASS + FAIL))
 printf '1..%s\n' "$TOTAL"
 if [ "$FAIL" -ne 0 ]; then

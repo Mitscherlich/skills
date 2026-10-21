@@ -1,12 +1,13 @@
 # {{id}} · {{title}} · plan（切片验收事实源）
 
 execution_mode: {{mode}}
+runtime_host: {{runtime_host}}
 
 > **阶段：plan（spec 编译产物）**。本文件是切片验收的事实源；acpus 模式的子任务运行状态以 Acpus Runtime 为准，不能用节点 completed 代替切片验收。
 > 上游：`spec.md`
 > spec_sha256: {{gate spec 通过时输出的 sha256}}
 > 准出门禁：`devloop gate plan --file <本文件> --spec <spec.md>` 全绿 **且** 确认记录齐全，才能进入 loop。
-> 执行区：worktree `{{绝对路径}}`（分支 `feat/devloop-{{id}}`）。host=`{{tmux|orca|acpus}}`。**绝不 push**。
+> 执行区：worktree `{{绝对路径}}`（分支 `feat/devloop-{{id}}`）。host=`{{tmux|herdr|orca|acpus}}`。**绝不 push**。
 > 每轮点火生成 attempt_id；产物路径含 attempt，或启动前把旧产物归档到 `run/archive/<attempt_id>/`。
 > 切片状态词固定：`open`（当前在做，至多一个）/ `done (commit, 门禁数字)` / `pending` / `paused(原因)`。
 
@@ -36,9 +37,9 @@ execution_mode: {{mode}}
 - 确认人：{{用户 / 责任人}}
 - 确认时间：{{ISO 时间}}
 - 确认范围：{{本 plan 覆盖哪些切片，哪些暂停}}
-- 执行宿主（`--host`）：{{default 用 tmux|orca|自动探测；acpus 写 acpus}} —— default 以 `devloop detect-host` 输出为准，acpus 不跑 host/scheduler 探测
+- 执行宿主（`--host`）：{{host 用 tmux|herdr|orca|自动探测；acpus 写 acpus}} —— host 以 `devloop detect-host --dir .devloop/<id>` 输出为准，acpus 不跑 host/scheduler 探测
   - 用户 `--host=` / `DEVLOOP_HOST=` 走严格 `--force`；仅偏好且允许降级时用 `--prefer`
-- 哨兵调度：{{default 用 loop|orca-automation|cronjob；acpus 写 Runtime}} —— default 以 `devloop detect-scheduler` 为准
+- 哨兵调度：{{host 用 loop|orca-automation|cronjob；acpus 写 Runtime}} —— host 以 `devloop detect-scheduler` 为准
 - 协调者：{{claude-code|codex|grok|omp|…}}
 - Orca setup policy：{{run|skip|inherit —— 非 Orca 时写「不适用」}}
 - 权限与 threat model：{{默认最小权限；若启用 bypassPermissions / danger sandbox，粘贴用户授权原文与必要性}}
@@ -57,7 +58,7 @@ execution_mode: {{mode}}
 
 ## 切片 roadmap
 
-> default 按实现切片填写；acpus 先拆全量 T 图，再填 F 验收批次。独立功能可共用一个 F；下列 F2/F9 按真实屏障保留或删除。
+> host 按实现切片填写；acpus 先拆全量 T 图，再填 F 验收批次。独立功能可共用一个 F；下列 F2/F9 按真实屏障保留或删除。
 
 | # | 切片 | 状态 | 范围（引用 R / I 编号） | DoD 附加项 |
 |---|---|---|---|---|
@@ -75,4 +76,4 @@ execution_mode: {{mode}}
 
 ## loop 小周期协议
 
-进入执行或恢复时，default 读技能的 `references/loop.md`，acpus 读 `references/acpus-mode.md`；全切片 done 后按 `references/closeout.md` 核对验收、将规格和知识归位、准备发布交接与候选。执行区交接需显式复制任务过程材料并核对 progress 记录的 plan hash，同时核对持久规格/知识版本。
+进入执行或恢复时，host 读技能的 `references/loop.md`，acpus 读 `references/acpus-mode.md`；全切片 done 后按 `references/closeout.md` 核对验收、将规格和知识归位、准备发布交接与候选。执行区交接需显式复制任务过程材料并核对 progress 记录的 plan hash，同时核对持久规格/知识版本。

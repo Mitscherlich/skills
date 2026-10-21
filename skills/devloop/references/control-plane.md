@@ -2,7 +2,9 @@
 
 统一入口 `<skill>/scripts/devloop`。先用 `next --dir` 决定动作；规程通过 SKILL.md 的条件链接按需读取。
 
-`init/doctor/detect-mode/next/status/gate/review-packet` 支持 `--mode default|acpus`（命令前后均可，不能重复）。这是执行后端，与门禁 `mode=full|draft`、`review_mode=joint|separate` 无关；输出单独使用 `execution_mode`。新任务默认 default，恢复从 intent/plan 继承，无字段的旧文件按 default；显式参数与记录冲突或两份记录不一致均拒绝。修改已确认任务的后端需要修订并重审受影响执行合同，不能用参数临时覆盖。
+`init/doctor/detect-mode/next/status/gate/review-packet` 支持 `--mode host|acpus`（命令前后均可，不能重复）。这是执行后端，与门禁 `mode=full|draft`、`review_mode=joint|separate` 无关；输出单独使用 `execution_mode`。新任务默认 host，恢复从 intent/plan 继承，无字段或 `execution_mode: default` 的旧文件按 host；显式参数与记录冲突或两份记录不一致均拒绝。修改已确认任务的后端需要修订并重审受影响执行合同，不能用参数临时覆盖。
+
+`init/doctor/detect-host` 支持前置或尾部 `--host tmux|herdr|orca`。init 保存 `runtime_host`（未指定为 auto），后续阶段继承；`detect-host --dir DIR` 读取 intent/plan 并拒绝冲突。旧文件无宿主记录则自动检测。`--mode acpus --host ...` 不支持，避免把终端宿主误当 ACP 进程包装器。
 
 | 命令 | 行为 | 退出码 |
 |---|---|---|
@@ -21,9 +23,9 @@
 | `attempt new\|archive ...` | 新 attempt / 运行目录内部旧报告搬移；仅保留本轮重试证据，与持久规格归位无关 | 0 / 1 |
 | `lock acquire\|release\|check --run-dir D --phase P` | mkdir 阶段锁：compile/impl/review/advance | acquire: 0 获得 / 1 忙 |
 | `detect-host ...` / `detect-scheduler ...` | 探测 host 与调度能力 | 见对应 --help |
-| `detect-mode [--dir DIR] [--mode default\|acpus] [--acpus-cli PATH]` | 只读检查模式、Acpus 必要命令及原生 doctor，Agent 就绪状态始终为 unchecked；返回安装/执行参考路径；default 不执行 Acpus | 0 可用或可选缺失 / 1 acpus 不可用或模式冲突 / 2 参数错误 |
+| `detect-mode [--dir DIR] [--mode host\|acpus] [--acpus-cli PATH]` | 只读检查模式、Acpus 必要命令及原生 doctor，Agent 就绪状态始终为 unchecked；返回安装/执行参考路径；host 不执行 Acpus | 0 可用或可选缺失 / 1 acpus 不可用或模式冲突 / 2 参数错误 |
 | `cleanup-sessions ...` | 仅关闭指定 worktree 的已完成 session，保留 keep 集合 | 0 / 非零失败 |
-| `doctor [--mode default\|acpus] [--acpus-cli PATH]` / `run-tests` | 按所选模式自检，acpus 不要求 tmux/Orca；全部 tests/*.test.sh | tests: 0 全绿 / 1 失败 / 2 无测试 |
+| `doctor [--mode host\|acpus] [--acpus-cli PATH]` / `run-tests` | 按所选模式自检，acpus 不要求 tmux/Orca；全部 tests/*.test.sh | tests: 0 全绿 / 1 失败 / 2 无测试 |
 
 ## 草稿和正式门禁
 
@@ -36,10 +38,10 @@
 - 管线：intent → spec → plan → loop → done；打回 spec→intent / plan→spec / loop→plan / done→loop。
 - 切片：pending → open → implementing → reviewing → done；支持 paused 和 re-open，见 `state transitions`。
 
-plan 是切片验收事实源，只持久化 open/pending/done/paused；implementing/reviewing 是 attempt 执行阶段，不写回 roadmap。acpus 的 T 状态从 Runtime 读取，`next` 返回 `phase_hint=acpus_workflow` 和对应规程，不根据 default 报告数量推断阶段；命令不会自动提交或轮询 Run。收尾不新增一套状态数据库。发布状态与下一轮候选记在 closeout，实际发布凭据在项目既有平台。新一轮创建新 ID，并引用 parent 与候选来源，不把旧 done 重解释成新任务。
+plan 是切片验收事实源，只持久化 open/pending/done/paused；implementing/reviewing 是 attempt 执行阶段，不写回 roadmap。acpus 的 T 状态从 Runtime 读取，`next` 返回 `phase_hint=acpus_workflow` 和对应规程，不根据 host 报告数量推断阶段；命令不会自动提交或轮询 Run。收尾不新增一套状态数据库。发布状态与下一轮候选记在 closeout，实际发布凭据在项目既有平台。新一轮创建新 ID，并引用 parent 与候选来源，不把旧 done 重解释成新任务。
 
 ## 依赖与限制
 
-核心沿用 POSIX sh、git、awk/sed、SHA 工具。default 不新增外部依赖；acpus 是可选后端，由 skill 协调者按已安装版本编译 TypeScript workflow，运行与恢复交给外部 Runtime，不是内置通用 workflow 编译器。安装见 [installation-acpus.md](installation-acpus.md)；两种运行协议分别见 [loop.md](loop.md)、[acpus-mode.md](acpus-mode.md)，收尾见 [closeout.md](closeout.md)。
+核心沿用 POSIX sh、git、awk/sed、SHA 工具。host 不新增外部依赖；acpus 是可选后端，由 skill 协调者按已安装版本编译 TypeScript workflow，运行与恢复交给外部 Runtime，不是内置通用 workflow 编译器。安装见 [installation-acpus.md](installation-acpus.md)；两种运行协议分别见 [loop.md](loop.md)、[acpus-mode.md](acpus-mode.md)，收尾见 [closeout.md](closeout.md)。
 
 `archive --dir --output` / `archive --verify` 外部整包方案已移除；CLI 返回迁移提示，不再打包。用 skill 按 [知识维护协议](knowledge.md) 将定稿需求合并到持久 specs，收尾将其它内容分别归位。

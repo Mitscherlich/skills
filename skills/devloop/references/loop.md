@@ -1,6 +1,6 @@
 # devloop 执行协议（进入 loop 后读取）
 
-本文件只用于 `execution_mode: default`（含无字段的旧任务）。`acpus` 模式改读 [acpus-mode.md](acpus-mode.md)，不执行本文件的宿主、调度和哨兵流程。
+本文件只用于 `execution_mode: host`（含无字段的旧任务）。`acpus` 模式改读 [acpus-mode.md](acpus-mode.md)，不执行本文件的宿主、调度和哨兵流程。
 
 进入执行前运行 intent/spec/plan 三个正式门禁并核对真实确认来源；`--draft` 不能授权点火。协调者不内联业务实现，保持 host runner 与独立 reviewer 的职责隔离。
 
@@ -11,8 +11,8 @@
 **唯一权威入口**：跑 skill 内脚本，消费其 stdout，不要手写探测逻辑。
 
 ```bash
-<path-to-skill>/scripts/devloop detect-host                 # 自动（推荐）
-<path-to-skill>/scripts/devloop detect-host --force orca    # 用户指定 --host=orca|tmux 时
+<path-to-skill>/scripts/devloop detect-host --dir .devloop/<id> # 继承记录；auto 时探测
+<path-to-skill>/scripts/devloop detect-host --host orca     # 显式选择 orca|herdr|tmux
 <path-to-skill>/scripts/devloop detect-host --prefer orca   # 仅偏好，不可用时允许降级
 <path-to-skill>/scripts/devloop detect-host --json          # 机器可读
 ```
@@ -21,10 +21,11 @@
 
 | 字段 | 含义 |
 |---|---|
-| `host` | `orca` 或 `tmux` — **直接采用，勿再推理** |
+| `host` | `orca`、`herdr` 或 `tmux` — **直接采用，勿再推理** |
 | `reason` | 决策说明，写入 progress.md |
 | `orca_cli` | 后续 Orca 命令用的可执行名/路径（host=orca 时必用） |
 | `orca_status` | `ok` / `fail` / `missing` / `skip` |
+| `herdr_available` | `0`/`1`，只检查安装，不检查服务状态 |
 | `tmux_available` | `0`/`1` |
 | `orca_worktree_id` | 环境注入的当前 worktree（可能为空） |
 
@@ -32,7 +33,7 @@
 
 1. 用户 `--host=` / 环境变量 `DEVLOOP_HOST` / 脚本 `--force`：严格选择；不可用即非零退出，不降级。
 2. 脚本 `--prefer`：优先目标 host；不可用时允许降级并在 `reason` 记录。
-3. 自动：Orca 信号 + CLI `status` 健康 → `orca`，否则偏好式降级 `tmux`。`--force tmux` 必须完全不探测、不调用 Orca。
+3. 自动：Orca 信号 + CLI `status` 健康 → `orca`，否则选择 PATH 中已安装的 `herdr`，再回退 `tmux`。显式 `--host herdr|tmux` 不调用 Orca。
 
 | 退出码 | 含义 |
 |---|---|
@@ -44,6 +45,8 @@
 `host=orca` 时的 worktree/terminal 扇出步骤见 [Orca 执行规程](orca-host.md)（**只在 host 已定为 orca 后**再读，避免无谓烧 token）。
 
 ### 0.5 解析哨兵调度（进入 loop 时必做）
+
+`host=herdr` 的启动、巡检和清理见 [Herdr 规程](herdr-host.md)，impl/reviewer 共用执行 checkout。
 
 host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调者（主会话 harness）和 impl/reviewer 不是一回事。`loop_supported=1` 只认**间隔调度** `/loop`（`/loop 10m <tick>` = 每 10 分钟再跑）。Claude Code / Grok 是这种。OMP 18.1+ 虽有同名 `/loop`，但是 yield 后立刻重投（`/loop 10m` = 连续重投最多 10 分钟），**不能当哨兵**；Orca 里用 omp 当协调者时走 `orca-automation`。
 
@@ -78,7 +81,7 @@ host 定下来之后、创建哨兵之前，**必须**跑调度探测。协调�
 
 ### 隔离执行区
 
-- **host=tmux**：`git worktree add`，分支 `feat/devloop-<id>-<slug>`。
+- **host=tmux/herdr**：`git worktree add`，分支 `feat/devloop-<id>-<slug>`。
 - **host=orca**：`ORCA worktree create --name devloop-<id>-<slug> ...`（优先 `--parent-worktree active`），**一个 devloop 一个 Orca worktree**；impl 与 reviewer **共用该 checkout**（禁止为 reviewer 再开平行 worktree 导致看不到 impl commit）。plan 必须记录 `setup=run|skip|inherit`。
 
 完成 lifecycle 交接后，在执行 worktree 立刻运行 `git config remote.origin.pushurl no_push`（或等价的无效 push URL）做硬禁 push，并验证配置生效。`.devloop/<id>/` 是本地执行记录，检查 Git 排除规则已生效；业务提交只暂存 allowlist 内路径。
@@ -93,6 +96,7 @@ Orca 详细命令与扇出步骤见 [Orca 执行规程](orca-host.md)；操作�
 
 1. 一次命令汇总：
    - **tmux**：session 存活性、日志行数、`tail -c 2000`、`git log --oneline -3`、`devloop next --dir .devloop/<id>`
+   - **herdr**：按 Herdr 规程读取本轮 pane 输出、退出状态与产物绑定。
    - **orca**：`terminal list` / `terminal read`、报告文件是否出现、`git log --oneline -3`（在执行 worktree path）、`devloop next --dir .devloop/<id>`；并立刻做下面第 6 步的 session 清理
 2. 停滞判定：runner/agent 仍在但日志或文件无进展 → 记「疑似停滞×N」，连续 2 次**主动通知用户**。
 3. 往 `progress.md` 巡检表**追加一行**（时间/切片/host/scheduler/runner 状态/提交数/要点）。
@@ -168,6 +172,10 @@ tmux new-session -d -s devloop-<id>-<slice> 'sh <worktree>/.devloop/<id>/run/lau
 
 一片一个 tmux session（`devloop-<id>-<slice>`）。同一时间只有一个 impl 在跑。
 
+#### host=herdr
+
+按 [Herdr 规程](herdr-host.md) 在独立 pane 运行 impl；runner 输入、日志和报告合同与 tmux 相同。
+
 #### host=orca（扇出 impl agent）
 
 细节见 [Orca 执行规程](orca-host.md)。摘要：
@@ -235,6 +243,8 @@ impl 完成后，必须启动 **reviewer**（默认 ≠ impl）。主会话**不
 | `claude-code` | `claude -p --permission-mode default --verbose --output-format stream-json < "$PROMPT"`；bypass 仅限已记录授权 |
 | `codex` | `codex exec --sandbox workspace-write - < "$PROMPT"`（只允许 acceptance 路径） |
 | `grok` | `grok --prompt-file "$PROMPT" --output-format streaming-json`；danger/bypass 仅限已记录授权 |
+
+**host=herdr** — 按 [Herdr 规程](herdr-host.md) 在同一 worktree 新建 reviewer pane，读取验收 prompt 并保存独立日志。
 
 **host=orca** — **同一 worktree** 再扇出 reviewer terminal（agent id 用映射表）：
 

@@ -11,11 +11,11 @@
 acpus skill read
 ```
 
-`init` 将模式写入 intent，后续 `init --stage plan` 自动继承并追加 `plan-acpus.md` 合同。未安装 Acpus 也可以准备草稿，但执行前 doctor 和下述实际能力检查必须通过。新任务不指定模式即 default；恢复沿用记录，不根据机器环境切换。
+`init` 将模式写入 intent，后续 `init --stage plan` 自动继承并追加 `plan-acpus.md` 合同。未安装 Acpus 也可以准备草稿，但执行前 doctor 和下述实际能力检查必须通过。新任务不指定模式即 host；恢复沿用记录，不根据机器环境切换。
 
 已有任务切换模式：先暂停旧后端，确认活动写入已停并保留现场；展示变更，按已有授权范围修订 intent/plan 的模式、执行合同及下游 hash，并按管线规程重审受影响内容。历史验收不重写。只传不同的 `--mode` 会报冲突，`--force` 也不能绕过模式一致性。
 
-正式 A/B/C、真实执行授权、前置条件、执行区交接仍全部成立。按 [安装指南](installation-acpus.md) 检查版本和 ACP agents，记录实际 CLI 路径/版本、实现与验收 profile、`ACPUS_HOME` 的实际绝对路径及 Runtime workspace cwd。doctor 不验证 Agent；首次启动前用真实结构化输出探针验证选定的 impl/reviewer。此模式由 Acpus 管理执行和运行状态，不启动 tmux/Orca runner、default 哨兵或第二套重试循环。
+正式 A/B/C、真实执行授权、前置条件、执行区交接仍全部成立。按 [安装指南](installation-acpus.md) 检查版本和 ACP agents，记录实际 CLI 路径/版本、实现与验收 profile、`ACPUS_HOME` 的实际绝对路径及 Runtime workspace cwd。doctor 不验证 Agent；首次启动前用真实结构化输出探针验证选定的 impl/reviewer。此模式由 Acpus 管理执行和运行状态，不启动 tmux/Orca runner、host 哨兵或第二套重试循环。
 
 ## 2. 先拆全量依赖图，再划验收批次
 
@@ -61,7 +61,7 @@ acpus runs inspect <run-id> --await-decision
 
 ## 4. 中途可见、可干预
 
-每次恢复先 `next --dir` 确认材料与当前 F，再从 progress 找到已有 Run ID 并 `runs inspect`，不能按 default 报告数量或终端哨兵猜阶段。Runtime 是 T 的运行状态权威，plan 是 F 的验收事实源；progress 只保存定位信息、决定和证据摘要。
+每次恢复先 `next --dir` 确认材料与当前 F，再从 progress 找到已有 Run ID 并 `runs inspect`，不能按 host 报告数量或终端哨兵猜阶段。Runtime 是 T 的运行状态权威，plan 是 F 的验收事实源；progress 只保存定位信息、决定和证据摘要。
 
 ```bash
 acpus runs inspect <run-id>

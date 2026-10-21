@@ -9,7 +9,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   cat <<'EOF'
-Usage: review-packet.sh --devloop-dir PATH [--mode default|acpus]
+Usage: review-packet.sh --devloop-dir PATH [--mode host|acpus]
 EOF
   exit 2
 }

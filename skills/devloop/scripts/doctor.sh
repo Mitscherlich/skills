@@ -7,11 +7,15 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
 # shellcheck disable=SC1091
 . "$HERE/lib/common.sh"
 ROOT=$(dl_skill_root "$HERE/doctor.sh")
-mode=default
+mode=host
+requested_host=
 mode_seen=0
 acpus_cli=acpus
 while [ $# -gt 0 ]; do
   case "$1" in
+    --host)
+      [ $# -ge 2 ] && [ -n "$2" ] && [ -z "$requested_host" ] || { printf 'error: --host 缺值或重复\n' >&2; exit 2; }
+      requested_host=$2; dl_validate_host "$requested_host"; shift 2 ;;
     --mode|--acpus-cli)
       [ $# -ge 2 ] && [ -n "$2" ] || { printf 'error: %s 需要值\n' "$1" >&2; exit 2; }
       if [ "$1" = --mode ]; then
@@ -19,10 +23,12 @@ while [ $# -gt 0 ]; do
         mode=$2; mode_seen=1; dl_validate_mode "$mode"
       else acpus_cli=$2; fi
       shift 2 ;;
-    -h|--help) printf 'Usage: doctor.sh [--mode default|acpus] [--acpus-cli PATH]\n'; exit 0 ;;
+    -h|--help) printf 'Usage: doctor.sh [--mode host|acpus] [--host tmux|herdr|orca] [--acpus-cli PATH]\n'; exit 0 ;;
     *) printf 'error: unknown arg: %s\n' "$1" >&2; exit 2 ;;
   esac
 done
+
+[ "$mode" != acpus ] || [ -z "$requested_host" ] || dl_die "--host 仅用于 --mode host"
 
 PASS=0
 FAIL=0
@@ -117,11 +123,14 @@ need_sh_n "$ROOT/scripts/detect-execution-mode.sh"
 # PATH tools used by host/tmux path
 if [ "$mode" = acpus ]; then
   ok 'host:acpus (不要求 tmux/Orca)'
-elif command -v tmux >/dev/null 2>&1; then
-  ok "path:tmux"
 else
-  dl_warn "tmux not on PATH (tmux host unavailable)"
-  bad "path:tmux"
+  set --
+  [ -z "$requested_host" ] || set -- --host "$requested_host"
+  if sh "$HERE/detect-runtime-host.sh" "$@"; then
+    ok 'runtime-host'
+  else
+    bad 'runtime-host'
+  fi
 fi
 
 if sh "$HERE/detect-execution-mode.sh" --mode "$mode" --acpus-cli "$acpus_cli"; then

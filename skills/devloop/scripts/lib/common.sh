@@ -56,22 +56,23 @@ dl_sha256_file() {
 # execution_mode 是执行后端；与 gate 的 mode=full|draft、review_mode 无关。
 dl_validate_mode() {
   case "$1" in
-    default|acpus) return 0 ;;
-    *) printf 'error: --mode 只允许 default|acpus：%s\n' "$1" >&2; return 2 ;;
+    host|acpus) return 0 ;;
+    *) printf 'error: --mode 只允许 host|acpus：%s\n' "$1" >&2; return 2 ;;
   esac
 }
 
-# 缺字段的旧文件按 default 处理；拒绝重复/非法声明，不能静默切换后端。
+# 缺字段的旧文件按 host 处理；拒绝重复/非法声明，不能静默切换后端。
 dl_file_mode() {
   _dm_file=$1
   [ -f "$_dm_file" ] || return 0
   _dm_count=$(grep -c '^execution_mode:' "$_dm_file" || true)
   [ "$_dm_count" -le 1 ] || { printf 'error: 重复 execution_mode：%s\n' "$_dm_file" >&2; return 2; }
   if [ "$_dm_count" -eq 0 ]; then
-    printf 'default\n'
+    printf 'host\n'
     return
   fi
   _dm_value=$(sed -n 's/^execution_mode:[[:space:]]*//p' "$_dm_file" | sed 's/[[:space:]]*$//')
+  [ "$_dm_value" != default ] || _dm_value=host
   dl_validate_mode "$_dm_value" || return $?
   printf '%s\n' "$_dm_value"
 }
@@ -95,5 +96,35 @@ dl_resolve_mode() {
     printf 'error: --mode=%s 与任务记录 %s 不一致；先修订并重审受影响文档\n' "$_dm_requested" "$_dm_recorded" >&2
     return 1
   fi
-  printf '%s\n' "${_dm_recorded:-${_dm_requested:-default}}"
+  printf '%s\n' "${_dm_recorded:-${_dm_requested:-host}}"
+}
+
+# auto 仅用于未指定宿主的持久记录；CLI --host 必须为具体宿主。
+dl_validate_host() {
+  case "$1" in tmux|herdr|orca) return 0 ;; esac
+  printf 'error: --host 只允许 tmux|herdr|orca：%s\n' "$1" >&2
+  return 2
+}
+
+dl_resolve_host() {
+  _dh_requested=$1
+  shift
+  [ -z "$_dh_requested" ] || dl_validate_host "$_dh_requested" || return $?
+  _dh_recorded=
+  for _dh_path in "$@"; do
+    [ -f "$_dh_path" ] || continue
+    _dh_count=$(grep -c '^runtime_host:' "$_dh_path" || true)
+    [ "$_dh_count" -le 1 ] || { printf 'error: 重复 runtime_host\n' >&2; return 2; }
+    [ "$_dh_count" -eq 1 ] || continue
+    _dh_value=$(sed -n 's/^runtime_host:[[:space:]]*//p' "$_dh_path" | sed 's/[[:space:]]*$//')
+    [ "$_dh_value" = auto ] || dl_validate_host "$_dh_value" || return $?
+    if [ -n "$_dh_recorded" ] && [ "$_dh_recorded" != "$_dh_value" ]; then
+      printf 'error: intent/plan 的 runtime_host 不一致\n' >&2; return 1
+    fi
+    _dh_recorded=$_dh_value
+  done
+  if [ -n "$_dh_requested" ] && [ -n "$_dh_recorded" ] && [ "$_dh_recorded" != "$_dh_requested" ]; then
+    printf 'error: --host 与任务记录不一致；先修订并重审受影响文档\n' >&2; return 1
+  fi
+  printf '%s\n' "${_dh_recorded:-${_dh_requested:-auto}}"
 }

@@ -1,7 +1,7 @@
 ---
 name: devloop
 description: 当用户要用 devloop 启动交付、继续已有 .devloop/<id>、初始化或维护项目知识库、收尾归档、从上一轮选择新 intent 时使用。支持 intent 确认、spec/plan 联审、独立实现与验收，以及发布交接。
-version: 0.10.1
+version: 0.11.0
 ---
 
 # devloop：从意图到可验证交付，再把知识带入下一轮
@@ -45,7 +45,9 @@ version: 0.10.1
 
 `next` 只读，返回 `stage/action` 和失败项。`await_*_review` 表示等待已有材料的审阅，不要继续制造问题。CLI 详细契约见 [control-plane](references/control-plane.md)。CLI 沿用 POSIX shell 和标准工具；规格语义合并按知识维护协议执行。
 
-执行后端通过 `--mode default|acpus` 显式选择，也支持 `devloop --mode acpus init ...`。新任务默认 `default`，沿用原宿主流程；`acpus` 是可选依赖，安装与兼容性检查见 [installation-acpus](references/installation-acpus.md)。模式存入 intent/plan，恢复自动沿用；旧文件无字段按 default 处理，不因检测到安装而切换，依赖缺失也不自动降级。
+执行后端通过 `--mode host|acpus` 显式选择，也支持 `devloop --mode acpus init ...`。新任务默认 `host`，沿用原宿主流程；`acpus` 是可选依赖，安装与兼容性检查见 [installation-acpus](references/installation-acpus.md)。模式存入 intent/plan，恢复自动沿用；旧文件无字段或写有 `execution_mode: default` 均按 host 读取，不改写原签署文件，不因检测到安装而切换，依赖缺失也不自动降级。
+
+`--host tmux|herdr|orca` 支持 `init`、`doctor`、`detect-host`，可放在子命令前后。新任务 `init --mode host --host herdr ...` 将选择存入 intent/plan 的 `runtime_host`；省略时写 `auto`，执行时检测。恢复用 `detect-host --dir .devloop/<id>`，显式选择与已有记录冲突则拒绝。自动顺序：当前会话在 Orca 且 CLI 健康 → PATH 中已安装 Herdr → tmux。Herdr 安装检查不代表服务已就绪，启动前按 [Herdr 规程](references/herdr-host.md) 检查。`--mode acpus` 不接受 `--host`；两者包装关系的调研见 [Acpus 与 Herdr](references/acpus-herdr.md)。
 
 ## 1. Intent：先写草稿，只问当前阻塞
 
@@ -75,12 +77,12 @@ gate 校验结构和文件绑定，不能证明签名是谁写的，也不能判
 
 ## 3. 执行：按当前 attempt 核验
 
-进入 loop、恢复 runner、处理停滞或重开切片时，先 `next --dir` 读取 `execution_mode`：default 读 [执行协议](references/loop.md)，确定 host=orca 时再读 [Orca 规程](references/orca-host.md)；acpus 读 [Acpus 执行协议](references/acpus-mode.md)，执行前 `doctor --mode acpus` 并读取本机 `acpus skill read`。每次只加载所选后端的执行规程。
+进入 loop、恢复 runner、处理停滞或重开切片时，先 `next --dir` 读取 `execution_mode`：host 读 [执行协议](references/loop.md)，确定 host=orca 时再读 [Orca 规程](references/orca-host.md)；acpus 读 [Acpus 执行协议](references/acpus-mode.md)，执行前 `doctor --mode acpus` 并读取本机 `acpus skill read`。每次只加载所选后端的执行规程。
 
 必须保留的边界：
 
 - 协调者编排，业务实现交给所选后端的 impl runner；默认与 impl 不同工具的 reviewer 独立验收。同工具验收须已有明确用户授权。
-- default 沿用逐片执行；acpus 在当前 F 内按 T 依赖图有界并行、独立 worktree，串行集成并验收整个 F。plan 仍至多一个 open；Runtime 管子任务运行状态，不能以节点完成替代验收。
+- host 沿用逐片执行；acpus 在当前 F 内按 T 依赖图有界并行、独立 worktree，串行集成并验收整个 F。plan 仍至多一个 open；Runtime 管子任务运行状态，不能以节点完成替代验收。
 - 每次点火生成新 attempt；goal 通过门禁 D，并绑定 spec/plan/goal/base/head。报告和 acceptance 先写临时文件再 atomic rename。
 - reviewer 只写验收报告，不改代码、不提交、不推进 plan。当前 HEAD 与 reviewed head 一致才能推进下一片。
 - goal 是 plan 某行的展开，不能新增需求。原承诺未满足留在本轮，不能改成下一轮候选来宣布完成。

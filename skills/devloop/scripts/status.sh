@@ -9,7 +9,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 usage() {
   cat <<'EOF'
-Usage: status.sh --plan PATH [--json] [--mode default|acpus]
+Usage: status.sh --plan PATH [--json] [--mode host|acpus]
 EOF
   exit 2
 }

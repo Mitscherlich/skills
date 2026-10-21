@@ -1,6 +1,6 @@
 # 安装与检查 Acpus（可选）
 
-只有显式选择 `--mode acpus` 的新任务使用 Acpus；未指定模式的新任务和无 `execution_mode` 字段的旧任务均使用 `default`。安装了 Acpus 也不会自动切换。devloop 不自动安装、升级或启动第三方服务。
+只有显式选择 `--mode acpus` 的新任务使用 Acpus；未指定模式的新任务和无 `execution_mode` 字段或原值为 `default` 的旧任务均使用 `host`。安装了 Acpus 也不会自动切换。devloop 不自动安装、升级或启动第三方服务。
 
 ## 安装
 
@@ -22,15 +22,15 @@ acpus skill read
 ## devloop 环境检查
 
 ```bash
-<skill>/scripts/devloop doctor --mode default
+<skill>/scripts/devloop doctor --mode host
 <skill>/scripts/devloop doctor --mode acpus
 <skill>/scripts/devloop detect-mode --dir .devloop/<id>
 # 安装在非标准 PATH 时，可单独检查指定可执行文件
 <skill>/scripts/devloop detect-mode --mode acpus --acpus-cli /absolute/path/to/acpus
 ```
 
-- `default`：报告 Acpus 是否在 PATH 上，不执行它，不因缺少 Acpus 而失败；原有宿主检查保持不变。
-- `acpus`：要求可执行文件存在、`--version` 成功且非空，探测 `skill read`、`workflow check/run`、`runs inspect/pause/resume/fork` 的 `--help`，再执行原生 `acpus doctor`。失败返回非零，输出安装文档位置，不回退到 default；此模式不要求 tmux/Orca。
+- `host`：报告 Acpus 是否在 PATH 上，不执行它，不因缺少 Acpus 而失败；原有宿主检查保持不变。
+- `acpus`：要求可执行文件存在、`--version` 成功且非空，探测 `skill read`、`workflow check/run`、`runs inspect/pause/resume/fork` 的 `--help`，再执行原生 `acpus doctor`。失败返回非零，输出安装文档位置，不回退到 host；此模式不要求 tmux/Orca。
 - `acpus_status`：`missing` 未找到；`present` 仅检查到安装；`broken` 版本命令失败；`incompatible` 必要命令探测失败；`unhealthy` 原生 doctor 失败；`ok` 上述检查通过。`unhealthy` 时直接运行 `acpus doctor` 查看诊断。帮助命令可能宽松处理未知参数，仍需实际 `skill read` 和 workflow 检查。
 - `acpus_agents_status=unchecked`：CLI/Runtime 健康检查不启动 Agent，不能证明 ACP 适配器、认证、模型请求或结构化输出可用；首次执行前必须完成下面的真实探针。
 
@@ -62,3 +62,5 @@ npm exec --yes --package='@agentclientprotocol/claude-agent-acp@^0.84.0' -- node
 ## 故障处理
 
 找不到命令时检查安装输出与 PATH；版本命令失败时检查 Node.js 与包的 engines；接口不匹配时读取本机指南并核对版本。提交结果不明时先检查原 Run，禁止直接重提同一批任务。安装修复不应删除 Runtime 数据或现有工作树。执行及观测流程见 [acpus-mode.md](acpus-mode.md)。
+
+与 Herdr 终端的包装边界见 [Acpus 与 Herdr 调研](acpus-herdr.md)。

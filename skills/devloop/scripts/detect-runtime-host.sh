@@ -7,17 +7,18 @@
 # 用法:
 #   detect-runtime-host.sh                 # 自动探测
 #   detect-runtime-host.sh --prefer orca   # 优先 orca，不可用则降级
+#   detect-runtime-host.sh --host herdr    # 显式选择；--force 为兼容别名
 #   detect-runtime-host.sh --force tmux    # 强制 host（仍会填可用字段）
 #   detect-runtime-host.sh --json          # JSON 输出（默认 key=value）
 #   DEVLOOP_HOST=orca detect-runtime-host.sh   # 环境变量等同 --force
 #
 # 退出码:
-#   0  已选出可用 host（orca 或 tmux）
-#   1  无可用 host（tmux 也不在 PATH）
+#   0  已选出可用 host（orca、herdr 或 tmux）
+#   1  无可用 host，或显式指定的 host 不可用
 #   2  参数错误
 #
 # 输出字段（key=value，一行一个）:
-#   host=orca|tmux
+#   host=orca|herdr|tmux
 #   reason=...
 #   orca_env=0|1
 #   orca_cli=...          # 解析到的可执行路径或空
@@ -25,39 +26,45 @@
 #   orca_status=ok|fail|skip|missing
 #   orca_worktree_id=...  # 环境注入或空
 #   orca_terminal_handle=...
+#   herdr_available=0|1
 #   tmux_available=0|1
-#   preferred=auto|orca|tmux
+#   preferred=auto|orca|herdr|tmux
 #   forced=0|1
 set -eu
 
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$HERE/lib/common.sh"
+DIR=
 FORMAT=kv
 PREFER=auto
 FORCE=""
 
 usage() {
   _usage_status=${1:-2}
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^set -eu/{ /^set -eu/d; p; }' "$0" | sed 's/^# \{0,1\}//'
   exit "$_usage_status"
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --dir) [ $# -ge 2 ] || usage; DIR=$2; shift 2 ;;
     --json) FORMAT=json; shift ;;
     --prefer)
       [ $# -ge 2 ] || usage
       PREFER=$2
-      case "$PREFER" in orca|tmux|auto) ;; *)
-        echo "error: --prefer must be orca|tmux|auto" >&2
+      case "$PREFER" in orca|herdr|tmux|auto) ;; *)
+        echo "error: --prefer must be orca|herdr|tmux|auto" >&2
         exit 2
         ;;
       esac
       shift 2
       ;;
-    --force)
+    --host|--force)
       [ $# -ge 2 ] || usage
+      [ -z "$FORCE" ] || { echo "error: 重复 --host/--force" >&2; exit 2; }
       FORCE=$2
-      case "$FORCE" in orca|tmux) ;; *)
-        echo "error: --force must be orca|tmux" >&2
+      case "$FORCE" in orca|herdr|tmux) ;; *)
+        echo "error: --force must be orca|herdr|tmux" >&2
         exit 2
         ;;
       esac
@@ -71,12 +78,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ -n "$DIR" ]; then
+  [ -d "$DIR" ] || dl_die "not a directory: $DIR"
+  FORCE=$(dl_resolve_host "$FORCE" "$DIR/intent.md" "$DIR/plan.md")
+  [ "$FORCE" != auto ] || FORCE=
+fi
+
 # 环境变量覆盖（与 --force 同效；CLI --force 优先）
 if [ -z "$FORCE" ] && [ -n "${DEVLOOP_HOST:-}" ]; then
   case "$DEVLOOP_HOST" in
-    orca|tmux) FORCE=$DEVLOOP_HOST ;;
+    orca|herdr|tmux) FORCE=$DEVLOOP_HOST ;;
     *)
-      echo "error: DEVLOOP_HOST must be orca|tmux (got: $DEVLOOP_HOST)" >&2
+      echo "error: DEVLOOP_HOST must be orca|herdr|tmux (got: $DEVLOOP_HOST)" >&2
       exit 2
       ;;
   esac
@@ -210,6 +223,9 @@ check_orca_status() {
   return 1
 }
 
+HERDR_AVAILABLE=0
+if is_exec herdr; then HERDR_AVAILABLE=1; fi
+
 TMUX_AVAILABLE=0
 if is_exec tmux; then
   TMUX_AVAILABLE=1
@@ -256,6 +272,9 @@ if [ -n "$FORCE" ]; then
       HOST=orca
       REASON="forced orca but cli unavailable or status not ok (orca_status=$ORCA_STATUS)"
     fi
+  elif [ "$FORCE" = herdr ]; then
+    HOST=herdr
+    REASON="forced herdr (installed=$HERDR_AVAILABLE)"
   else
     if [ "$TMUX_AVAILABLE" -eq 1 ]; then
       HOST=tmux
@@ -273,7 +292,7 @@ else
     tmux) _want_orca=0 ;;
     auto)
       # 仅当处于 Orca 托管环境（环境变量信号）时才自动选 orca。
-      # 本机装了 orca CLI、app 在跑但当前 shell 不是 Orca 终端 → 仍用 tmux，
+      # 本机装了 orca CLI、app 在跑但当前 shell 不是 Orca 终端 → 先选已安装 Herdr，再回退 tmux，
       # 避免「装了 Orca 就到处扇出」；需要时用 --force orca / DEVLOOP_HOST=orca。
       if [ "$ORCA_ENV" -eq 1 ]; then
         _want_orca=1
@@ -288,26 +307,12 @@ else
     else
       REASON="prefer/force orca and cli status ok"
     fi
-  elif [ "$_want_orca" -eq 1 ] && [ "$ORCA_CLI_OK" -eq 0 ]; then
-    if [ "$TMUX_AVAILABLE" -eq 1 ]; then
-      HOST=tmux
-      REASON="wanted orca but cli unavailable/status=$ORCA_STATUS; degraded to tmux"
-    else
-      HOST=tmux
-      REASON="wanted orca but cli unavailable/status=$ORCA_STATUS; tmux also missing"
-    fi
+  elif [ "$PREFER" != tmux ] && [ "$HERDR_AVAILABLE" -eq 1 ]; then
+    HOST=herdr
+    REASON="herdr installed; no eligible healthy Orca session selected"
   else
-    if [ "$TMUX_AVAILABLE" -eq 1 ]; then
-      HOST=tmux
-      if [ "$ORCA_ENV" -eq 0 ] && [ "$ORCA_CLI_OK" -eq 1 ]; then
-        REASON="default tmux (orca cli healthy but not in Orca-managed env; use --force orca to override)"
-      else
-        REASON="default tmux (no orca env signals or prefer=tmux)"
-      fi
-    else
-      HOST=tmux
-      REASON="tmux preferred/default but tmux not in PATH"
-    fi
+    HOST=tmux
+    REASON="fallback/preferred tmux (available=$TMUX_AVAILABLE)"
   fi
 fi
 
@@ -321,6 +326,7 @@ emit_kv() {
   printf 'orca_status=%s\n' "$ORCA_STATUS"
   printf 'orca_worktree_id=%s\n' "$ORCA_WORKTREE_ID_VAL"
   printf 'orca_terminal_handle=%s\n' "$ORCA_TERMINAL_HANDLE_VAL"
+  printf 'herdr_available=%s\n' "$HERDR_AVAILABLE"
   printf 'tmux_available=%s\n' "$TMUX_AVAILABLE"
   printf 'preferred=%s\n' "$PREFER"
   printf 'forced=%s\n' "$FORCED"
@@ -341,6 +347,7 @@ emit_json() {
   printf '  "orca_status": "%s",\n' "$(json_escape "$ORCA_STATUS")"
   printf '  "orca_worktree_id": "%s",\n' "$(json_escape "$ORCA_WORKTREE_ID_VAL")"
   printf '  "orca_terminal_handle": "%s",\n' "$(json_escape "$ORCA_TERMINAL_HANDLE_VAL")"
+  printf '  "herdr_available": %s,\n' "$HERDR_AVAILABLE"
   printf '  "tmux_available": %s,\n' "$TMUX_AVAILABLE"
   printf '  "preferred": "%s",\n' "$(json_escape "$PREFER")"
   printf '  "forced": %s\n' "$FORCED"
@@ -358,6 +365,10 @@ if [ "$HOST" = "orca" ]; then
   if [ "$ORCA_CLI_OK" -eq 1 ]; then
     exit 0
   fi
+  exit 1
+fi
+if [ "$HOST" = herdr ]; then
+  [ "$HERDR_AVAILABLE" -eq 1 ] && exit 0
   exit 1
 fi
 # host=tmux

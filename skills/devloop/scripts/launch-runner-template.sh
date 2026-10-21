@@ -1,8 +1,8 @@
 #!/bin/sh
-# devloop runner 启动器模板（host=tmux 时在 tmux 内运行）。
+# devloop runner 启动器模板（host=tmux/herdr 时在相应终端内运行）。
 # 用法: launch-runner.sh <slice>   例: launch-runner.sh f1
 #
-# 仅当执行宿主 host=tmux 时使用本脚本。
+# 执行宿主 host=tmux/herdr 时使用本脚本。
 # 若进入 loop 时探测到 Orca 环境（host=orca），改用 orca-cli 扇出 agent，
 # 见 references/orca-host.md —— 不要在本脚本里模拟 Orca。
 #
