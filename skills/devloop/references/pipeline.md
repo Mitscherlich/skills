@@ -56,14 +56,14 @@ stage 只接受 spec / plan / impl / release；owner 和 due 均非空。due 说
 
 用 `templates/plan.md`，输入为 spec、intent 后续事项和现状代码：
 
-- 给每条 R 映射 F；按一次独立 runner 可交付且可验证的切片拆分。依赖单向、每次至多一个 open。
+- 给每条 R 映射 F；default 按一次独立 runner 可交付且可验证的切片拆分；acpus 先按下述规则拆全量 T 图，再归组 F。依赖单向、每次至多一个 open。
 - 优先安排最薄的真实链路，早暴露接口/环境约束；有凭据前置的切片明确 paused，其余独立切片可继续。保留最终整体验证。
 - 后续问题进入「执行前置条件」，每项标 Q ID、负责人、满足证据和阻塞切片/发布动作。主会话编 goal 前核验。
 - 按 [知识维护协议](knowledge.md) 填「相关项目知识」；编译 spec 时同样按索引读取本轮适用资料。
 - 确认记录包含范围、host/impl/reviewer、权限、source worktree/base、控制面与规格/知识归位范围、清理边界。能探测的选项自动填写；权限例外由真实授权支持。
 - 切片状态为 open / pending / done (...) / paused(...)。plan 是切片状态唯一事实源，goal 不推进它。
 
-`execution_mode: acpus` 时，F 表示顺序验收批次；用 `init --stage plan` 继承模式并追加 [plan-acpus.md](../templates/plan-acpus.md) 合同。先明确公共契约，再将独立模块拆成同一 F 内的 T 子图，声明依赖、写入边界、验证命令、并发与累计预算；结构门禁检查覆盖/引用/无环，语义独立性由协调者查代码核验。批次之间仍至多一个 open，最终集成和全批次验收不可省略。具体编译与执行见 [acpus-mode.md](acpus-mode.md)。
+`execution_mode: acpus` 时，F 表示顺序验收批次；用 `init --stage plan` 继承模式并追加 [plan-acpus.md](../templates/plan-acpus.md) 合同。编制 roadmap 前先读 [并行规划规则](acpus-mode.md#2-先拆全量依赖图再划验收批次)，拆全量 T 图后再归组 F，声明依赖理由、批次屏障、写入边界、验证命令、并发与累计预算；结构门禁检查覆盖/引用/无环，语义独立性由协调者查代码核验。批次之间仍至多一个 open，最终集成和全批次验收不可省略。具体编译与执行见 [acpus-mode.md](acpus-mode.md)。
 
 ## 联审和 hash 封存顺序
 

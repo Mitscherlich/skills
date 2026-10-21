@@ -36,6 +36,7 @@ run init --id integration --root "$TMP/tasks" --stage plan
 expect 0 'execution_mode=acpus' 'plan 自动追加并行合同'
 fill "$D/plan.md" >"$TMP/filled"
 mv "$TMP/filled" "$D/plan.md"
+replace '/^| F2 |/d' "$D/plan.md"
 replace "s/^> spec_sha256: 已填内容$/> spec_sha256: $SSHA/;s/^- 进入 loop 结论：已填内容$/- 进入 loop 结论：通过/" "$D/plan.md"
 run gate plan --file "$D/plan.md" --spec "$D/spec.md"
 expect 0 'ok=1' '完整 Acpus 模板可通过正式门禁'
@@ -44,7 +45,7 @@ expect 0 'phase_hint=acpus_workflow' '正式门禁后完整管线路由 Acpus'
 cp "$D/plan.md" "$TMP/good-plan"
 
 # 有向依赖无须按表格顺序排列；合法 DAG 可以通过。
-replace 's/| T2 | F2 | - |/| T2 | F2 | T3 |/' "$D/plan.md"
+replace 's/| T2 | F1 | - |/| T2 | F1 | T3 |/' "$D/plan.md"
 run gate plan --file "$D/plan.md" --spec "$D/spec.md"
 expect 0 'ok=1' '合法反向表格依赖仍可拓扑调度'
 
@@ -54,22 +55,23 @@ check_invalid() {
   run gate plan --draft --file "$D/plan.md" --spec "$D/spec.md"
   expect 1 'P-acpus' "$2（草稿门禁同样约束）"
 }
-replace 's/| T3 | F2 | - |/| T3 | F2 | T2 |/' "$D/plan.md"
+replace 's/| T3 | F1 | - |/| T3 | F1 | T2 |/' "$D/plan.md"
 check_invalid '循环依赖' '拒绝依赖环'
 cp "$TMP/good-plan" "$D/plan.md"
-replace 's/| T2 | F2 | - |/| T2 | F2 | T99 |/' "$D/plan.md"
+replace 's/| T2 | F1 | - |/| T2 | F1 | T99 |/' "$D/plan.md"
 check_invalid '未知依赖' '拒绝悬空依赖'
 cp "$TMP/good-plan" "$D/plan.md"
-replace 's/| T2 | F2 | - |/| T2 | F2 | T1 |/' "$D/plan.md"
+printf '\n| F2 | checkpoint | pending | R1 | check |\n| T4 | F2 | - | other/ | true |\n' >>"$D/plan.md"
+replace 's/| T2 | F1 | - |/| T2 | F1 | T4 |/' "$D/plan.md"
 check_invalid '跨切片依赖' '跨批次依赖不能混入同批次 DAG'
 cp "$TMP/good-plan" "$D/plan.md"
-replace 's/| T2 | F2 |/| T2 | F8 |/' "$D/plan.md"
+replace 's/| T2 | F1 |/| T2 | F8 |/' "$D/plan.md"
 check_invalid '未知切片' '拒绝不存在的所属切片'
 cp "$TMP/good-plan" "$D/plan.md"
 replace 's/| T3 |/| T2 |/' "$D/plan.md"
 check_invalid '重复子任务' '拒绝重复任务 ID'
 cp "$TMP/good-plan" "$D/plan.md"
-replace '/^| T1 |/d' "$D/plan.md"
+replace '/^| T[123] |/d' "$D/plan.md"
 check_invalid 'F1 缺少子任务' '每个活动批次须有可执行子任务'
 cp "$TMP/good-plan" "$D/plan.md"
 replace 's/| T1 | F1 | - | 已填内容 |/| T1 | F1 | - | |/' "$D/plan.md"

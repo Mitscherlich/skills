@@ -1,7 +1,7 @@
 ---
 name: devloop
 description: 当用户要用 devloop 启动交付、继续已有 .devloop/<id>、初始化或维护项目知识库、收尾归档、从上一轮选择新 intent 时使用。支持 intent 确认、spec/plan 联审、独立实现与验收，以及发布交接。
-version: 0.10.0
+version: 0.10.1
 ---
 
 # devloop：从意图到可验证交付，再把知识带入下一轮
@@ -66,7 +66,7 @@ version: 0.10.0
 按 [pipeline.md](references/pipeline.md) 编译与签署，模板在 `templates/`。
 
 1. spec 应用项目规范，形成 R 需求表、设计和关注点。逐项接住 intent 转交的问题：设计事项解决在 spec，执行条件进入 plan 并标明阻塞切片，发布条件进入发布交接。不要丢失原 ID。
-2. 新流程 `joint`：spec 的 `gate spec --draft --intent ...` 通过即可编译 plan 草稿。plan 包含 R→F 追溯、独立可验证的切片、统一 DoD 和执行边界。acpus 模式同时按 [执行合同](templates/plan-acpus.md) 编制当前批次内可并行的 T 子图、写入边界、验证与预算；先稳定公共契约，再并行独立模块。
+2. 新流程 `joint`：spec 的 `gate spec --draft --intent ...` 通过即可编译 plan 草稿。plan 包含 R→F 追溯、独立可验证的切片、统一 DoD 和执行边界。acpus 模式先读 [并行规划规则](references/acpus-mode.md#2-先拆全量依赖图再划验收批次)，拆全量 T 图后再归组 F，填写 [执行合同](templates/plan-acpus.md)；独立功能分片放进同一 F 并行，每条依赖与批次屏障均须说明具体理由。
 3. 两份草稿检查通过，向用户展示同一份联审摘要：目标与范围、关键设计取舍、风险、切片与验证、仍需人裁决的增量、执行及收尾授权。全文提供链接；优先处理关注点，不让用户重读没有变化的内容。
 4. 用户联审通过后，以同一真实确认来源填写 spec 签署与 plan 确认记录，按 pipeline 的顺序封存绑定。任何语义变更都展示增量并重审受影响部分；签署封存后按知识维护协议将定稿需求合并到 `docs/knowledge/specs/`，标明实现状态。正式 intent/spec/plan 全通过后才进入执行。
 5. 多人职责分离、用户要求逐阶段审阅时，将 intent 的 `review_mode` 设为 `separate`。无此字段的旧流程仍按分别签署执行；继续旧流程时不自动改模式或重置已有授权。
